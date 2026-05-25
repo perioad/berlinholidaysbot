@@ -1,6 +1,7 @@
 import { Bot } from 'grammy';
 
 import type { HandlerDependencies } from './dependencies';
+import { createGrammyBot } from './grammy-bot';
 import { registerHandlers } from './handlers';
 import { createErrorMiddleware } from './middlewares/error.middleware';
 import { createLoggingMiddleware } from './middlewares/logging.middleware';
@@ -22,7 +23,7 @@ export type CreateBotOptions = {
  * requests pass straight through.
  */
 export function createBot(options: CreateBotOptions): Bot {
-  const bot = options.bot ?? new Bot(options.token);
+  const bot = options.bot ?? createGrammyBot(options.token);
 
   bot.use(createLoggingMiddleware(options.deps.logger));
   bot.use(

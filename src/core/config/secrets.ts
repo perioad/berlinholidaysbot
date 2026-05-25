@@ -1,9 +1,10 @@
 import {
-  GetParameterCommand,
   GetParametersCommand,
   SSMClient,
   type SSMClientConfig,
 } from '@aws-sdk/client-ssm';
+
+import { withTimeout } from '../util/with-timeout';
 
 /**
  * Secret values fetched from SSM Parameter Store at Lambda cold start.
@@ -11,7 +12,7 @@ import {
  * CloudFormation does NOT support `{{resolve:ssm-secure:...}}` dynamic
  * references in `AWS::Lambda::Function.Environment.Variables` (see CFN docs
  * - SecureString refs are only valid for an allowlist of resource
- * properties, which does not include Lambda env vars). So each Lambda
+ * properties, which does not include Lambda env vars). So the Lambda
  * fetches them itself at runtime, once per container.
  */
 export type BotSecrets = {
@@ -26,26 +27,22 @@ export type SecretParameterNames = {
   logsChatIdName: string;
 };
 
-/** Options shared by every fetch helper in this module. */
-type SsmFetchOptions = {
+export type FetchSecretsOptions = SecretParameterNames & {
   /** Defaults to a fresh `SSMClient`. Inject your own for tests. */
   client?: SSMClient;
   /** Region passed to the default client. Ignored if `client` is provided. */
   region?: string;
+  /** Override the per-call timeout. Defaults to {@link SSM_TIMEOUT_MS}. */
+  timeoutMs?: number;
 };
 
-export type FetchSecretsOptions = SecretParameterNames & SsmFetchOptions;
-
-export type FetchBotTokenOptions = SsmFetchOptions & {
-  paramName: string;
-};
-
-function resolveClient(options: SsmFetchOptions): SSMClient {
-  if (options.client) return options.client;
-  return new SSMClient(
-    options.region ? ({ region: options.region } as SSMClientConfig) : {},
-  );
-}
+/**
+ * Hard cap on a single SSM `GetParameters` call. SSM normally responds in
+ * 50-200ms; anything beyond 5s indicates IAM or networking trouble, and we
+ * want to surface that as a thrown error (visible in logs) instead of
+ * silently consuming the Lambda invocation timeout.
+ */
+export const SSM_TIMEOUT_MS = 5000;
 
 /**
  * Fetches all three secrets in a single `GetParameters` round-trip
@@ -65,11 +62,19 @@ export async function fetchSecrets(
 
   const names = [botTokenName, logsBotTokenName, logsChatIdName];
 
-  const result = await client.send(
-    new GetParametersCommand({
-      Names: names,
-      WithDecryption: true,
-    }),
+  // The AWS SDK has no default request timeout, so a misconfigured
+  // network or IAM setup hangs silently until Lambda's invocation
+  // timeout kills the process. Cap the call ourselves so the failure
+  // mode is a visible thrown error instead of a 15s ghost.
+  const result = await withTimeout(
+    client.send(
+      new GetParametersCommand({
+        Names: names,
+        WithDecryption: true,
+      }),
+    ),
+    options.timeoutMs ?? SSM_TIMEOUT_MS,
+    `SSM GetParameters for [${names.join(', ')}]`,
   );
 
   if (result.InvalidParameters && result.InvalidParameters.length > 0) {
@@ -109,29 +114,9 @@ export async function fetchSecrets(
   return secrets;
 }
 
-/**
- * Fetches a single SSM SecureString. Used by the webhook-registrar Lambda
- * which only needs the bot token. Same IAM and same error semantics as
- * `fetchSecrets`, just narrower.
- */
-export async function fetchBotToken(
-  options: FetchBotTokenOptions,
-): Promise<string> {
-  const client = resolveClient(options);
-
-  const result = await client.send(
-    new GetParameterCommand({
-      Name: options.paramName,
-      WithDecryption: true,
-    }),
+function resolveClient(options: FetchSecretsOptions): SSMClient {
+  if (options.client) return options.client;
+  return new SSMClient(
+    options.region ? ({ region: options.region } as SSMClientConfig) : {},
   );
-
-  const value = result.Parameter?.Value;
-  if (!value) {
-    throw new Error(
-      `SSM parameter ${options.paramName} is empty or missing. ` +
-        `Run 'npm run secrets' to provision it.`,
-    );
-  }
-  return value;
 }

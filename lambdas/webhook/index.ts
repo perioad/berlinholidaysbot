@@ -11,6 +11,7 @@ import { fetchSecrets } from '../../src/core/config/secrets';
 import { createDynamoUsersRepository } from '../../src/core/database/dynamo-users-repository';
 import { buildNewUser } from '../../src/core/domain/user';
 import { createLogger } from '../../src/core/logger/logger';
+import { withTimeout } from '../../src/core/util/with-timeout';
 import { createBot } from '../../src/telegram/bot-factory';
 
 /**
@@ -21,17 +22,19 @@ import { createBot } from '../../src/telegram/bot-factory';
  * references in Lambda env vars (see `src/core/config/secrets.ts`).
  *
  * The init runs once per warm container and is cached in
- * `cachedHandlerPromise` - both cold and warm invocations await the same
- * promise, so two near-simultaneous cold-start invocations share one
- * `GetParameters` round-trip instead of doing it twice.
+ * `cachedHandlerPromise`. Two near-simultaneous cold-start invocations
+ * share the same promise so we only do one SSM round-trip.
  *
- * The Lambda is fronted by a Function URL. Function URLs deliver events
- * in the same payload v2 shape as HTTP API, which grammy's
- * `aws-lambda-async` adapter handles transparently.
+ * `bot.init()` and `inner(event)` are guarded by `withTimeout` so a
+ * stuck Telegram or DynamoDB call surfaces as a clear error instead of
+ * hitting the Lambda's hard timeout with no signal.
  */
 type WebhookHandler = (
   event: LambdaFunctionURLEvent,
 ) => Promise<LambdaFunctionURLResult>;
+
+const BOT_INIT_TIMEOUT_MS = 5000;
+const HANDLER_TIMEOUT_MS = 12000;
 
 let cachedHandlerPromise: Promise<WebhookHandler> | null = null;
 
@@ -66,6 +69,15 @@ async function buildHandler(): Promise<WebhookHandler> {
     },
   });
 
+  // Eagerly fetch the bot identity at cold start so the first incoming
+  // update doesn't pay the getMe roundtrip, and so outbound-network or
+  // token problems fail loudly here instead of inside an update.
+  await withTimeout(bot.init(), BOT_INIT_TIMEOUT_MS, 'bot.init');
+  logger.info('Bot initialized', {
+    id: bot.botInfo.id,
+    username: bot.botInfo.username,
+  });
+
   return webhookCallback(bot, 'aws-lambda-async', {
     secretToken: env.TELEGRAM_WEBHOOK_SECRET,
   }) as unknown as WebhookHandler;
@@ -74,11 +86,12 @@ async function buildHandler(): Promise<WebhookHandler> {
 export const handler: LambdaFunctionURLHandler = async (event, _context) => {
   if (!cachedHandlerPromise) {
     cachedHandlerPromise = buildHandler().catch(error => {
-      // Don't pin a failed init - next invocation should retry.
+      // Bootstrap failures predate the logger, so fall back to console.
+      console.error('Bootstrap failed', error);
       cachedHandlerPromise = null;
       throw error;
     });
   }
   const inner = await cachedHandlerPromise;
-  return inner(event);
+  return withTimeout(inner(event), HANDLER_TIMEOUT_MS, 'grammy webhook handler');
 };

@@ -1,12 +1,8 @@
-import {
-  GetParameterCommand,
-  GetParametersCommand,
-  SSMClient,
-} from '@aws-sdk/client-ssm';
+import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { mockClient } from 'aws-sdk-client-mock';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { fetchBotToken, fetchSecrets } from '../../../src/core/config/secrets';
+import { fetchSecrets } from '../../../src/core/config/secrets';
 
 const NAMES = {
   botTokenName: '/berlinholidaysbot/bot-token',
@@ -78,46 +74,21 @@ describe('fetchSecrets', () => {
       fetchSecrets({ ...NAMES, client: ssm as unknown as SSMClient }),
     ).rejects.toThrow(/logs-bot-token/);
   });
-});
 
-describe('fetchBotToken', () => {
-  const ssm = mockClient(SSMClient);
-
-  beforeEach(() => {
-    ssm.reset();
-  });
-
-  afterEach(() => {
-    ssm.reset();
-  });
-
-  it('returns the decrypted bot token', async () => {
-    ssm.on(GetParameterCommand).resolves({
-      Parameter: { Name: NAMES.botTokenName, Value: 'bot-secret' },
-    });
-
-    const token = await fetchBotToken({
-      paramName: NAMES.botTokenName,
-      client: ssm as unknown as SSMClient,
-    });
-
-    expect(token).toBe('bot-secret');
-    const calls = ssm.commandCalls(GetParameterCommand);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.args[0].input).toEqual({
-      Name: NAMES.botTokenName,
-      WithDecryption: true,
-    });
-  });
-
-  it('throws when the parameter is missing', async () => {
-    ssm.on(GetParameterCommand).resolves({});
+  it('throws a timeout error when SSM hangs longer than the configured budget', async () => {
+    ssm.on(GetParametersCommand).callsFake(
+      () =>
+        new Promise(() => {
+          // never resolves, simulating a stuck network call
+        }),
+    );
 
     await expect(
-      fetchBotToken({
-        paramName: NAMES.botTokenName,
+      fetchSecrets({
+        ...NAMES,
         client: ssm as unknown as SSMClient,
+        timeoutMs: 25,
       }),
-    ).rejects.toThrow(/bot-token/);
+    ).rejects.toThrow(/timed out after 25ms/);
   });
 });

@@ -1,5 +1,6 @@
 import { Bot } from 'grammy';
 
+import { createGrammyBot } from '../../telegram/grammy-bot';
 import type { Logger } from '../logger/logger';
 import { formatError, type AdminNotifier } from './admin-notifier';
 
@@ -31,7 +32,7 @@ export type TelegramAdminNotifierOptions = {
 export function createTelegramAdminNotifier(
   options: TelegramAdminNotifierOptions,
 ): AdminNotifier {
-  const bot = options.bot ?? new Bot(options.token);
+  const bot = options.bot ?? createGrammyBot(options.token);
   const { chatId, logger } = options;
 
   return {
