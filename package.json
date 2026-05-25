@@ -14,7 +14,9 @@
     "diff": "cdk diff",
     "deploy": "cdk deploy --require-approval never --outputs-file cdk-outputs.json",
     "destroy": "cdk destroy --force",
-    "bootstrap": "cdk bootstrap"
+    "bootstrap": "cdk bootstrap",
+    "secrets": "bash scripts/provision-secrets.sh",
+    "secrets:rotate": "bash scripts/provision-secrets.sh --force"
   },
   "author": "",
   "license": "ISC",

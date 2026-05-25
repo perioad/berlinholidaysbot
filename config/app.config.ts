@@ -26,11 +26,27 @@ export type TelegramConfig = {
   webhookSecretToken?: string;
 };
 
+/**
+ * Names of the SSM SecureString parameters that hold the bot's secrets.
+ *
+ * The CDK stack reads them through `SecretValue.ssmSecure(name)`, which
+ * synthesizes to `{{resolve:ssm-secure:NAME}}` (no version suffix) - so
+ * CloudFormation always resolves the **latest** value at deploy time.
+ * Rotation is then just: update the value in SSM via the provisioning
+ * script, then `npm run deploy`. No code change needed.
+ */
+export type SsmConfig = {
+  botTokenName: string;
+  logsBotTokenName: string;
+  logsChatIdName: string;
+};
+
 export type AppConfig = {
   stackName: string;
   lambda: LambdaConfig;
   dynamodb: DynamoConfig;
   telegram: TelegramConfig;
+  ssm: SsmConfig;
 };
 
 export const appConfig: AppConfig = {
@@ -45,4 +61,9 @@ export const appConfig: AppConfig = {
     usersTableName: 'berlin-holidays-bot-users',
   },
   telegram: {},
+  ssm: {
+    botTokenName: '/berlinholidaysbot/bot-token',
+    logsBotTokenName: '/berlinholidaysbot/logs-bot-token',
+    logsChatIdName: '/berlinholidaysbot/logs-chat-id',
+  },
 };

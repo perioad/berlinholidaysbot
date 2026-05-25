@@ -13,13 +13,16 @@ export type WebhookLambdaProps = {
   timeoutSec: number;
   logRetentionDays: number;
   usersTable: Table;
-  /** Telegram bot token (Lambda runtime env var). */
+  /**
+   * SSM dynamic reference for the Telegram bot token. The value resolves
+   * server-side at deploy time, so the template only carries a pointer.
+   */
   botToken: string;
-  /** Token of the separate logs bot. */
+  /** SSM dynamic reference for the separate logs bot token. */
   logsBotToken: string;
-  /** Chat id messages from the logs bot should be sent to. */
+  /** SSM dynamic reference for the chat id the logs bot posts to. */
   logsChatId: string;
-  /** Optional Telegram webhook secret. */
+  /** Optional Telegram webhook secret (plain string from app config). */
   telegramWebhookSecret?: string;
   /** debug | info | warn | error. */
   logLevel: string;
