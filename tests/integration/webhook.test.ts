@@ -81,6 +81,20 @@ function buildHarness(opts: { usersOverride?: Partial<UsersRepository> } = {}) {
   return { bot, calls, users, adminNotifier };
 }
 
+const ACTIVE_USER: BotUser = {
+  id: '555',
+  isActive: true,
+  isBot: false,
+  isPremium: false,
+  languageCode: 'en',
+  firstName: 'Ada',
+  lastName: '',
+  username: '',
+  startDate: '2025-01-01T00:00:00.000Z',
+};
+
+const INACTIVE_USER: BotUser = { ...ACTIVE_USER, isActive: false };
+
 function startUpdate(): Update {
   return {
     update_id: 1,
@@ -133,7 +147,7 @@ describe('webhook integration', () => {
     vi.clearAllMocks();
   });
 
-  it('on /start: saves a new user, notifies admin, and replies with "hello world"', async () => {
+  it('on /start (new user): saves user, notifies admin, replies welcome', async () => {
     const { bot, calls, users, adminNotifier } = buildHarness();
 
     await bot.handleUpdate(startUpdate());
@@ -149,30 +163,43 @@ describe('webhook integration', () => {
     expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(/^New user:/);
   });
 
-  it('on /start with an existing inactive user: reactivates, notifies, and replies', async () => {
-    const existing: BotUser = {
-      id: '555',
-      isActive: false,
-      isBot: false,
-      isPremium: false,
-      languageCode: 'en',
-      firstName: 'Ada',
-      lastName: '',
-      username: '',
-      startDate: '2025-01-01T00:00:00.000Z',
-    };
-
-    const { bot, users, adminNotifier } = buildHarness({
-      usersOverride: { getById: vi.fn().mockResolvedValue(existing) },
+  it('on /start (inactive user): reactivates and notifies admin', async () => {
+    const { bot, calls, users, adminNotifier } = buildHarness({
+      usersOverride: { getById: vi.fn().mockResolvedValue(INACTIVE_USER) },
     });
 
     await bot.handleUpdate(startUpdate());
 
     expect(users.reactivate).toHaveBeenCalledWith('555');
     expect(users.save).not.toHaveBeenCalled();
+
+    const sends = calls.filter(c => c.method === 'sendMessage');
+    expect(sends).toHaveLength(1);
+    expect((sends[0]!.payload as { text: string }).text).toBe('Welcome back!');
+
+    expect(adminNotifier.notify).toHaveBeenCalledOnce();
+    expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(/^User reactivated:/);
+  });
+
+  it('on /start (already active): replies "already subscribed" and notifies admin', async () => {
+    const { bot, calls, users, adminNotifier } = buildHarness({
+      usersOverride: { getById: vi.fn().mockResolvedValue(ACTIVE_USER) },
+    });
+
+    await bot.handleUpdate(startUpdate());
+
+    expect(users.save).not.toHaveBeenCalled();
+    expect(users.reactivate).not.toHaveBeenCalled();
+
+    const sends = calls.filter(c => c.method === 'sendMessage');
+    expect(sends).toHaveLength(1);
+    expect((sends[0]!.payload as { text: string }).text).toBe(
+      'You are already subscribed!',
+    );
+
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
     expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(
-      /^User reactivated:/,
+      /^User ran \/start while already active:/,
     );
   });
 
@@ -213,9 +240,10 @@ describe('webhook integration', () => {
 
     await bot.handleUpdate(startUpdate());
 
-    expect(adminNotifier.notify).toHaveBeenCalledOnce();
-    const [message] = adminNotifier.notify.mock.calls[0]!;
-    expect(message).toMatch(/^\[ERROR /);
-    expect(message).toContain('Error: db down');
+    const errorNotifications = adminNotifier.notify.mock.calls
+      .map((c: unknown[]) => c[0] as string)
+      .filter((m: string) => m.startsWith('[ERROR'));
+    expect(errorNotifications).toHaveLength(1);
+    expect(errorNotifications[0]).toContain('Error: db down');
   });
 });

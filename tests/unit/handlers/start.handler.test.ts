@@ -40,17 +40,16 @@ function ctxFor(fromId: number): CommandContext<Context> {
 }
 
 describe('startHandler', () => {
-  it('saves a new user, notifies admin, and replies "hello world"', async () => {
+  it('saves a new user, notifies admin, and replies with welcome', async () => {
     const deps = makeDeps();
     const ctx = ctxFor(7);
-    const reply = ctx.reply as ReturnType<typeof vi.fn>;
 
     await createStartHandler(deps)(ctx);
 
     expect(deps.users.save).toHaveBeenCalledOnce();
     expect(deps.adminNotifier.notify).toHaveBeenCalledOnce();
     expect(deps.adminNotifier.notify.mock.calls[0]![0]).toMatch(/^New user:/);
-    expect(reply).toHaveBeenCalledWith('hello world');
+    expect(ctx.reply).toHaveBeenCalledWith('hello world');
   });
 
   it('reactivates an existing inactive user and notifies admin', async () => {
@@ -77,9 +76,10 @@ describe('startHandler', () => {
     expect(deps.adminNotifier.notify.mock.calls[0]![0]).toMatch(
       /^User reactivated:/,
     );
+    expect(ctx.reply).toHaveBeenCalledWith('Welcome back!');
   });
 
-  it('does not notify admin when the user is already active', async () => {
+  it('replies "already subscribed" and notifies admin for active user', async () => {
     const deps = makeDeps({
       getById: vi.fn().mockResolvedValue({
         id: '7',
@@ -99,7 +99,12 @@ describe('startHandler', () => {
 
     expect(deps.users.save).not.toHaveBeenCalled();
     expect(deps.users.reactivate).not.toHaveBeenCalled();
-    expect(deps.adminNotifier.notify).not.toHaveBeenCalled();
+
+    expect(deps.adminNotifier.notify).toHaveBeenCalledOnce();
+    expect(deps.adminNotifier.notify.mock.calls[0]![0]).toMatch(
+      /^User ran \/start while already active:/,
+    );
+    expect(ctx.reply).toHaveBeenCalledWith('You are already subscribed!');
   });
 
   it('logs a warning and returns when ctx.from is missing', async () => {

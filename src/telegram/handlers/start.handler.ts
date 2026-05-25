@@ -7,9 +7,9 @@ import { notifyAdmin } from '../notifications';
 
 /**
  * /start - creates the user (or reactivates them) and replies with the
- * hardcoded greeting. New + reactivated users are reported to the admin
- * channel; "already-active" /start hits are intentionally silent to keep
- * noise down for returning chats.
+ * welcome greeting, or tells an already-active user they are subscribed.
+ * Every invocation is reported to the admin channel so the operator sees
+ * all command activity.
  */
 export function createStartHandler(deps: HandlerDependencies) {
   return async (ctx: CommandContext<Context>): Promise<void> => {
@@ -49,8 +49,21 @@ export function createStartHandler(deps: HandlerDependencies) {
         kind: 'user-reactivated',
         user: ctx.from,
       });
+    } else {
+      await notifyAdmin(deps.adminNotifier, {
+        kind: 'user-already-active',
+        user: ctx.from,
+        command: 'start',
+      });
     }
 
-    await ctx.reply(Messages.Reply);
+    const reply =
+      status === 'already-active'
+        ? Messages.AlreadyActive
+        : status === 'reactivated'
+          ? Messages.WelcomeBack
+          : Messages.Welcome;
+
+    await ctx.reply(reply);
   };
 }

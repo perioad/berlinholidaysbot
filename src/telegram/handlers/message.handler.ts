@@ -23,6 +23,6 @@ export function createMessageHandler(deps: HandlerDependencies) {
       text: ctx.message.text,
     });
 
-    await ctx.reply(Messages.Reply);
+    await ctx.reply(Messages.Welcome);
   };
 }

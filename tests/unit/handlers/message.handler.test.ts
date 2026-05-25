@@ -32,7 +32,7 @@ function ctxFor(text: string): Filter<Context, 'message:text'> {
 }
 
 describe('messageHandler', () => {
-  it('replies with the hardcoded "hello world"', async () => {
+  it('replies with the welcome message', async () => {
     const deps = makeDeps();
     const ctx = ctxFor('something');
 

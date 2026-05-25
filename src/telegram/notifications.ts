@@ -11,6 +11,8 @@ export type AdminEvent =
   | { kind: 'user-joined'; user: User }
   | { kind: 'user-reactivated'; user: User }
   | { kind: 'user-left'; status: string; user: User | { id: string } }
+  | { kind: 'user-command'; user: User; command: string }
+  | { kind: 'user-already-active'; user: User; command: string }
   | { kind: 'user-message'; user: User | undefined; text: string };
 
 function describeUser(user: User | { id: string } | undefined): string {
@@ -25,6 +27,10 @@ export function formatAdminEvent(event: AdminEvent): string {
       return `User reactivated: ${describeUser(event.user)}`;
     case 'user-left':
       return `User left (${event.status}): ${describeUser(event.user)}`;
+    case 'user-command':
+      return `User command /${event.command}: ${describeUser(event.user)}`;
+    case 'user-already-active':
+      return `User ran /${event.command} while already active: ${describeUser(event.user)}`;
     case 'user-message':
       return `User message: ${describeUser(event.user)}\n${event.text}`;
   }
