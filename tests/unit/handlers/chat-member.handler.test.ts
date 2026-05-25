@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { buildNewUser } from '../../../src/core/domain/user';
 import { createChatMemberHandler } from '../../../src/telegram/handlers/chat-member.handler';
+import {
+  createMockAdminNotifier,
+  createSilentLogger,
+} from '../../helpers/mocks';
 
 function deps() {
   return {
@@ -12,14 +16,8 @@ function deps() {
       reactivate: vi.fn(),
       deactivate: vi.fn().mockResolvedValue(undefined),
     },
-    adminNotifier: { notify: vi.fn().mockResolvedValue(undefined) },
-    logger: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      child: vi.fn(),
-    },
+    adminNotifier: createMockAdminNotifier(),
+    logger: createSilentLogger(),
     buildUser: buildNewUser,
   };
 }

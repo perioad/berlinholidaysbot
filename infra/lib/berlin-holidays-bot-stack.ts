@@ -4,7 +4,6 @@ import { Construct } from 'constructs';
 import type { AppConfig } from '../../config/app.config';
 import { UsersTable } from './constructs/users-table.construct';
 import { WebhookLambda } from './constructs/webhook-lambda.construct';
-import { WebhookRegistrar } from './constructs/webhook-registrar.construct';
 
 export type BerlinHolidaysBotStackProps = StackProps & {
   config: AppConfig;
@@ -13,12 +12,19 @@ export type BerlinHolidaysBotStackProps = StackProps & {
 };
 
 /**
- * Top-level stack. Composes the three single-concern constructs:
+ * Top-level stack. Composes two single-concern constructs:
  *
- *   UsersTable + WebhookLambda (Function URL) + WebhookRegistrar
+ *   UsersTable + WebhookLambda (with Function URL)
+ *
+ * Webhook registration with Telegram is intentionally NOT automated by the
+ * stack: it's a one-shot operation (the Function URL is stable across
+ * deploys unless the Lambda itself is deleted), so we kept it manual to
+ * avoid carrying around two extra Lambdas (custom-resource handler +
+ * CDK Provider framework) for a job that runs once a year. See AGENTS.md
+ * > "Webhook registration" for the curl commands.
  *
  * Secrets are NOT passed into the stack as values - only the SSM
- * parameter NAMES are. Each Lambda reads its own secrets at cold start
+ * parameter NAMES are. The Lambda reads its own secrets at cold start
  * via `fetchSecrets()` (see `src/core/config/secrets.ts`). This sidesteps
  * the CloudFormation limitation that `{{resolve:ssm-secure:...}}` dynamic
  * references are not supported in `AWS::Lambda::Function.Environment`.
@@ -54,15 +60,11 @@ export class BerlinHolidaysBotStack extends Stack {
       logLevel: props.logLevel ?? 'info',
     });
 
-    new WebhookRegistrar(this, 'WebhookRegistrar', {
-      botTokenParamName: config.ssm.botTokenName,
-      webhookUrl: webhookLambda.url,
-      secretToken: config.telegram.webhookSecretToken,
-    });
-
     new CfnOutput(this, 'WebhookUrl', {
       value: webhookLambda.url,
-      description: 'URL Telegram POSTs updates to.',
+      description:
+        'URL Telegram POSTs updates to. After first deploy, register it ' +
+        'with Telegram via the curl in AGENTS.md > Webhook registration.',
     });
 
     new CfnOutput(this, 'UsersTableName', {

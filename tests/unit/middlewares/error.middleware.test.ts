@@ -2,16 +2,10 @@ import type { Context } from 'grammy';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createErrorMiddleware } from '../../../src/telegram/middlewares/error.middleware';
-
-function makeLogger() {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    child: vi.fn(),
-  };
-}
+import {
+  createMockAdminNotifier,
+  createSilentLogger,
+} from '../../helpers/mocks';
 
 const ctx = {
   update: { update_id: 42, message: { text: 'hi' } },
@@ -19,8 +13,8 @@ const ctx = {
 
 describe('errorMiddleware', () => {
   it('passes through when next() resolves', async () => {
-    const adminNotifier = { notify: vi.fn() };
-    const logger = makeLogger();
+    const adminNotifier = createMockAdminNotifier();
+    const logger = createSilentLogger();
     const middleware = createErrorMiddleware({ adminNotifier, logger });
 
     const next = vi.fn().mockResolvedValue(undefined);
@@ -32,8 +26,8 @@ describe('errorMiddleware', () => {
   });
 
   it('notifies on errors thrown downstream and swallows them', async () => {
-    const adminNotifier = { notify: vi.fn().mockResolvedValue(undefined) };
-    const logger = makeLogger();
+    const adminNotifier = createMockAdminNotifier();
+    const logger = createSilentLogger();
     const middleware = createErrorMiddleware({ adminNotifier, logger });
 
     const boom = new Error('boom');

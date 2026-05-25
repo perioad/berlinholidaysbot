@@ -3,6 +3,7 @@ import type { CommandContext, Context } from 'grammy';
 import { upsertOnStart } from '../../core/database/users-repository';
 import type { HandlerDependencies } from '../dependencies';
 import { Messages } from '../messages';
+import { notifyAdmin } from '../notifications';
 
 /**
  * /start - creates the user (or reactivates them) and replies with the
@@ -39,13 +40,15 @@ export function createStartHandler(deps: HandlerDependencies) {
     });
 
     if (status === 'new') {
-      await deps.adminNotifier.notify(
-        `New user: ${JSON.stringify(ctx.from)}`,
-      );
+      await notifyAdmin(deps.adminNotifier, {
+        kind: 'user-joined',
+        user: ctx.from,
+      });
     } else if (status === 'reactivated') {
-      await deps.adminNotifier.notify(
-        `User reactivated: ${JSON.stringify(ctx.from)}`,
-      );
+      await notifyAdmin(deps.adminNotifier, {
+        kind: 'user-reactivated',
+        user: ctx.from,
+      });
     }
 
     await ctx.reply(Messages.Reply);

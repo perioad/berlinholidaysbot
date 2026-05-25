@@ -2,10 +2,13 @@ import { Bot, type RawApi, type Transformer } from 'grammy';
 import type { UserFromGetMe, Update } from 'grammy/types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { AdminNotifier } from '../../src/core/admin/admin-notifier';
 import type { UsersRepository } from '../../src/core/database/users-repository';
 import { buildNewUser, type BotUser } from '../../src/core/domain/user';
 import { createBot } from '../../src/telegram/bot-factory';
+import {
+  createMockAdminNotifier,
+  createSilentLogger,
+} from '../helpers/mocks';
 
 const BOT_INFO = {
   id: 1,
@@ -21,16 +24,6 @@ const BOT_INFO = {
   has_topics_enabled: false,
   allows_users_to_create_topics: false,
 } as unknown as UserFromGetMe;
-
-const SILENT_LOGGER = {
-  debug: vi.fn(),
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  child: function () {
-    return this;
-  },
-};
 
 type OutgoingCall = {
   method: keyof RawApi;
@@ -69,9 +62,7 @@ function buildHarness(opts: { usersOverride?: Partial<UsersRepository> } = {}) {
     ...opts.usersOverride,
   };
 
-  const adminNotifier: AdminNotifier = {
-    notify: vi.fn().mockResolvedValue(undefined),
-  };
+  const adminNotifier = createMockAdminNotifier();
 
   const bot = new Bot('test-token', { botInfo: BOT_INFO });
   bot.api.config.use(captureTransformer);
@@ -82,7 +73,7 @@ function buildHarness(opts: { usersOverride?: Partial<UsersRepository> } = {}) {
     deps: {
       users,
       adminNotifier,
-      logger: SILENT_LOGGER,
+      logger: createSilentLogger(),
       buildUser: buildNewUser,
     },
   });
@@ -155,9 +146,7 @@ describe('webhook integration', () => {
     expect((sends[0]!.payload as { text: string }).text).toBe('hello world');
 
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
-    expect(
-      (adminNotifier.notify as ReturnType<typeof vi.fn>).mock.calls[0]![0],
-    ).toMatch(/^New user:/);
+    expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(/^New user:/);
   });
 
   it('on /start with an existing inactive user: reactivates, notifies, and replies', async () => {
@@ -182,9 +171,9 @@ describe('webhook integration', () => {
     expect(users.reactivate).toHaveBeenCalledWith('555');
     expect(users.save).not.toHaveBeenCalled();
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
-    expect(
-      (adminNotifier.notify as ReturnType<typeof vi.fn>).mock.calls[0]![0],
-    ).toMatch(/^User reactivated:/);
+    expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(
+      /^User reactivated:/,
+    );
   });
 
   it('on any text message: replies "hello world" and notifies admin', async () => {
@@ -197,8 +186,7 @@ describe('webhook integration', () => {
     expect((sends[0]!.payload as { text: string }).text).toBe('hello world');
 
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
-    const notification = (adminNotifier.notify as ReturnType<typeof vi.fn>)
-      .mock.calls[0]![0] as string;
+    const notification = adminNotifier.notify.mock.calls[0]![0];
     expect(notification).toMatch(/^User message:/);
     expect(notification).toContain('random chatter');
   });
@@ -210,9 +198,9 @@ describe('webhook integration', () => {
 
     expect(users.deactivate).toHaveBeenCalledWith('555');
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
-    expect(
-      (adminNotifier.notify as ReturnType<typeof vi.fn>).mock.calls[0]![0],
-    ).toMatch(/^User left \(kicked\):/);
+    expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(
+      /^User left \(kicked\):/,
+    );
   });
 
   it('routes thrown errors through the admin notifier', async () => {
@@ -226,8 +214,7 @@ describe('webhook integration', () => {
     await bot.handleUpdate(startUpdate());
 
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
-    const [message] = (adminNotifier.notify as ReturnType<typeof vi.fn>).mock
-      .calls[0]!;
+    const [message] = adminNotifier.notify.mock.calls[0]!;
     expect(message).toMatch(/^\[ERROR /);
     expect(message).toContain('Error: db down');
   });

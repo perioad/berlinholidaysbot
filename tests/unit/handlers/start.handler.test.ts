@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildNewUser } from '../../../src/core/domain/user';
 import type { UsersRepository } from '../../../src/core/database/users-repository';
 import { createStartHandler } from '../../../src/telegram/handlers/start.handler';
+import {
+  createMockAdminNotifier,
+  createSilentLogger,
+} from '../../helpers/mocks';
 
 function makeDeps(usersOverride?: Partial<UsersRepository>) {
   const users: UsersRepository = {
@@ -16,14 +20,8 @@ function makeDeps(usersOverride?: Partial<UsersRepository>) {
 
   return {
     users,
-    adminNotifier: { notify: vi.fn().mockResolvedValue(undefined) },
-    logger: {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      child: vi.fn(),
-    },
+    adminNotifier: createMockAdminNotifier(),
+    logger: createSilentLogger(),
     buildUser: buildNewUser,
   };
 }

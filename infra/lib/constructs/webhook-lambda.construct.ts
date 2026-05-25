@@ -1,12 +1,13 @@
 import * as path from 'node:path';
 
-import { Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy } from 'aws-cdk-lib';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
-import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { FunctionUrlAuthType, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
+
+import { grantSsmSecureRead } from '../iam/ssm-secure-read';
 
 export type WebhookLambdaProps = {
   functionName: string;
@@ -99,45 +100,6 @@ export class WebhookLambda extends Construct {
     });
     this.url = functionUrl.url;
   }
-}
-
-/**
- * Grants the Lambda role the minimum permissions it needs to read SSM
- * SecureString parameters: GetParameter(s) on the specific parameter ARNs
- * and KMS Decrypt scoped to the SSM service via `kms:ViaService` (so the
- * role can't decrypt unrelated KMS-encrypted data even if the key allows
- * it for other reasons).
- */
-function grantSsmSecureRead(
-  lambda: NodejsFunction,
-  parameterNames: string[],
-): void {
-  const { region, account } = Stack.of(lambda);
-
-  const parameterArns = parameterNames.map(
-    name => `arn:aws:ssm:${region}:${account}:parameter${name}`,
-  );
-
-  lambda.addToRolePolicy(
-    new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['ssm:GetParameter', 'ssm:GetParameters'],
-      resources: parameterArns,
-    }),
-  );
-
-  lambda.addToRolePolicy(
-    new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['kms:Decrypt'],
-      resources: ['*'],
-      conditions: {
-        StringEquals: {
-          'kms:ViaService': `ssm.${region}.amazonaws.com`,
-        },
-      },
-    }),
-  );
 }
 
 function mapLogRetention(days: number): RetentionDays {

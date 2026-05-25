@@ -1,6 +1,7 @@
 import type { Context, Filter } from 'grammy';
 
 import type { HandlerDependencies } from '../dependencies';
+import { notifyAdmin } from '../notifications';
 
 const INACTIVE_STATUSES = new Set(['kicked', 'left']);
 
@@ -26,8 +27,10 @@ export function createChatMemberHandler(deps: HandlerDependencies) {
       newStatus,
     });
 
-    await deps.adminNotifier.notify(
-      `User left (${newStatus}): ${JSON.stringify(ctx.from ?? { id: chatId })}`,
-    );
+    await notifyAdmin(deps.adminNotifier, {
+      kind: 'user-left',
+      status: newStatus,
+      user: ctx.from ?? { id: chatId },
+    });
   };
 }

@@ -12,8 +12,9 @@
     "format:check": "prettier --check .",
     "synth": "cdk synth",
     "diff": "cdk diff",
-    "deploy": "cdk deploy --require-approval never --outputs-file cdk-outputs.json",
+    "deploy": "cdk deploy --require-approval never --outputs-file cdk-outputs.json && bash scripts/register-webhook.sh",
     "destroy": "cdk destroy --force",
+    "webhook": "bash scripts/register-webhook.sh",
     "bootstrap": "cdk bootstrap",
     "secrets": "bash scripts/provision-secrets.sh",
     "secrets:rotate": "bash scripts/provision-secrets.sh --force"

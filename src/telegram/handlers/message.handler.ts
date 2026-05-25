@@ -2,6 +2,7 @@ import type { Context, Filter } from 'grammy';
 
 import type { HandlerDependencies } from '../dependencies';
 import { Messages } from '../messages';
+import { notifyAdmin } from '../notifications';
 
 /**
  * Any text message that is *not* a recognised command - replies with the
@@ -16,9 +17,11 @@ export function createMessageHandler(deps: HandlerDependencies) {
       text: ctx.message.text,
     });
 
-    await deps.adminNotifier.notify(
-      `User message: ${JSON.stringify(ctx.from)}\n${ctx.message.text}`,
-    );
+    await notifyAdmin(deps.adminNotifier, {
+      kind: 'user-message',
+      user: ctx.from,
+      text: ctx.message.text,
+    });
 
     await ctx.reply(Messages.Reply);
   };
