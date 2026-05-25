@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+node_modules
+dist
+cdk.out
+cdk-outputs.json
+coverage
+*.zip
+*.log
+.DS_Store
+.vscode
+.idea
+
+AGENTS.md

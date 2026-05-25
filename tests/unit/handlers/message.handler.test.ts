@@ -1,0 +1,59 @@
+import type { Context, Filter } from 'grammy';
+import { describe, expect, it, vi } from 'vitest';
+
+import { buildNewUser } from '../../../src/core/domain/user';
+import { createMessageHandler } from '../../../src/telegram/handlers/message.handler';
+
+function makeDeps() {
+  return {
+    users: {
+      getById: vi.fn(),
+      save: vi.fn(),
+      reactivate: vi.fn(),
+      deactivate: vi.fn(),
+    },
+    adminNotifier: { notify: vi.fn().mockResolvedValue(undefined) },
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    },
+    buildUser: buildNewUser,
+  };
+}
+
+function ctxFor(text: string): Filter<Context, 'message:text'> {
+  const reply = vi.fn().mockResolvedValue(undefined);
+  return {
+    from: { id: 7, is_bot: false, first_name: 'Ada' },
+    message: { text },
+    reply,
+  } as unknown as Filter<Context, 'message:text'>;
+}
+
+describe('messageHandler', () => {
+  it('replies with the hardcoded "hello world"', async () => {
+    const deps = makeDeps();
+    const ctx = ctxFor('something');
+
+    await createMessageHandler(deps)(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledOnce();
+    expect(ctx.reply).toHaveBeenCalledWith('hello world');
+  });
+
+  it('notifies admin with the sender and the message text', async () => {
+    const deps = makeDeps();
+    const ctx = ctxFor('hi bot');
+
+    await createMessageHandler(deps)(ctx);
+
+    expect(deps.adminNotifier.notify).toHaveBeenCalledOnce();
+    const message = deps.adminNotifier.notify.mock.calls[0]![0] as string;
+    expect(message).toMatch(/^User message:/);
+    expect(message).toContain('"first_name":"Ada"');
+    expect(message).toContain('hi bot');
+  });
+});

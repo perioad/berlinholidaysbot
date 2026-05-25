@@ -1,0 +1,40 @@
+{
+  "name": "berlinholidaysbot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --require-approval never --outputs-file cdk-outputs.json",
+    "destroy": "cdk destroy --force",
+    "bootstrap": "cdk bootstrap"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1053.0",
+    "@aws-sdk/lib-dynamodb": "^3.1053.0",
+    "aws-cdk-lib": "^2.257.0",
+    "constructs": "^10.6.0",
+    "grammy": "^1.43.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.161",
+    "@types/node": "^25.9.1",
+    "aws-cdk": "^2.1124.1",
+    "aws-sdk-client-mock": "^4.1.0",
+    "esbuild": "^0.28.0",
+    "prettier": "^3.8.3",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  }
+}

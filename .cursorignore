@@ -1,0 +1,28 @@
+# Secrets and local-only configuration.
+# Files matching these patterns are NOT sent to the AI, indexed, or
+# automatically attached as context. The example/template files are kept
+# visible so the agent still understands the project shape.
+.env
+.env.*
+!.env.example
+
+# AWS / cloud credentials
+.aws/
+aws.config
+credentials
+
+# Private keys and certs
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+
+# CDK deploy artefacts (often contain account ids, bucket names, etc.)
+cdk-outputs.json
+cdk.out/
+
+# Local override scripts you don't want shared
+.local/
+*.local
