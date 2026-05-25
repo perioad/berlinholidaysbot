@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 
-import { CustomResource, Duration, RemovalPolicy } from 'aws-cdk-lib';
+import { CustomResource, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
@@ -8,13 +9,8 @@ import { Provider } from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 
 export type WebhookRegistrarProps = {
-  /**
-   * SSM dynamic reference (`{{resolve:ssm-secure:...}}`) for the bot token.
-   * Wired to the handler Lambda's env var, NOT to the custom resource
-   * properties - those land in the synthesized template in plain text and
-   * would leak the value to anyone with `cloudformation:GetTemplate`.
-   */
-  botToken: string;
+  /** SSM parameter name (not value) for the main bot token. */
+  botTokenParamName: string;
   webhookUrl: string;
   /** Optional Telegram webhook secret (plain string from app config). */
   secretToken?: string;
@@ -28,10 +24,9 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
  *
  * After `cdk deploy`, the bot is live: no curl, no manual step.
  *
- * Sensitive values (the bot token, the optional secret) travel via the
- * handler Lambda's env vars. The custom resource itself only carries
- * non-sensitive triggers - the webhook URL and a deploy timestamp - so the
- * rendered CloudFormation template stays free of secrets.
+ * The bot token is read from SSM by the handler itself at invocation
+ * time. Only the parameter NAME (not the value) is passed via env var, so
+ * the synthesized CloudFormation template stays free of secrets.
  */
 export class WebhookRegistrar extends Construct {
   constructor(scope: Construct, id: string, props: WebhookRegistrarProps) {
@@ -61,10 +56,33 @@ export class WebhookRegistrar extends Construct {
         externalModules: ['@aws-sdk/*'],
       },
       environment: {
-        BOT_TOKEN: props.botToken,
+        BOT_TOKEN_PARAM_NAME: props.botTokenParamName,
         ...(props.secretToken ? { SECRET_TOKEN: props.secretToken } : {}),
       },
     });
+
+    const { region, account } = Stack.of(this);
+    onEventHandler.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['ssm:GetParameter'],
+        resources: [
+          `arn:aws:ssm:${region}:${account}:parameter${props.botTokenParamName}`,
+        ],
+      }),
+    );
+    onEventHandler.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ['kms:Decrypt'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: {
+            'kms:ViaService': `ssm.${region}.amazonaws.com`,
+          },
+        },
+      }),
+    );
 
     // `Provider` itself has no `logGroup` prop yet and its `logRetention` is
     // the property AWS deprecated. Leaving it unset lets the framework lambda

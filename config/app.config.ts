@@ -29,11 +29,15 @@ export type TelegramConfig = {
 /**
  * Names of the SSM SecureString parameters that hold the bot's secrets.
  *
- * The CDK stack reads them through `SecretValue.ssmSecure(name)`, which
- * synthesizes to `{{resolve:ssm-secure:NAME}}` (no version suffix) - so
- * CloudFormation always resolves the **latest** value at deploy time.
- * Rotation is then just: update the value in SSM via the provisioning
- * script, then `npm run deploy`. No code change needed.
+ * Only the NAMES travel through the CloudFormation template (as plain
+ * Lambda env vars). The Lambda fetches the values itself at cold start
+ * via `fetchSecrets()` in `src/core/config/secrets.ts`. CloudFormation
+ * does not support `{{resolve:ssm-secure:...}}` dynamic references in
+ * Lambda env vars, which is why we resolve at runtime instead of at
+ * deploy time.
+ *
+ * Rotation = update the value in SSM with `npm run secrets:rotate`; the
+ * next cold start picks up the new value automatically (no redeploy).
  */
 export type SsmConfig = {
   botTokenName: string;

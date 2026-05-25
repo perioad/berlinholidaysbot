@@ -4,17 +4,16 @@ import type {
   CloudFormationCustomResourceResponse,
 } from 'aws-lambda';
 
+import { fetchBotToken } from '../../src/core/config/secrets';
+
 /**
- * CDK Custom Resource handler that registers (and unregisters) the Telegram
- * webhook with the freshly-deployed Function URL.
+ * CDK Custom Resource handler that registers (and unregisters) the
+ * Telegram webhook with the freshly-deployed Function URL.
  *
- * The bot token and optional webhook secret come from the handler's own env
- * vars (sourced from SSM via dynamic references in
- * `webhook-registrar.construct.ts`). They are deliberately NOT passed
- * through `ResourceProperties` because those land in the synthesized
- * CloudFormation template in plain text.
- *
- * Only non-sensitive values travel through the event payload.
+ * The bot token is fetched from SSM at invocation time (CloudFormation
+ * does not support `ssm-secure` dynamic references in Lambda env vars).
+ * `BOT_TOKEN_PARAM_NAME` and `SECRET_TOKEN` arrive as env vars set by the
+ * construct; nothing sensitive travels through `ResourceProperties`.
  */
 type WebhookProperties = {
   WebhookUrl: string;
@@ -40,26 +39,25 @@ function getProperties(
   return props;
 }
 
-function getBotToken(): string {
-  const token = process.env.BOT_TOKEN;
-  if (!token) {
-    throw new Error(
-      'WebhookRegistrar handler missing BOT_TOKEN env var. ' +
-        'Did the SSM dynamic reference fail to resolve?',
-    );
+function getBotTokenParamName(): string {
+  const paramName = process.env.BOT_TOKEN_PARAM_NAME;
+  if (!paramName) {
+    throw new Error('WebhookRegistrar handler missing BOT_TOKEN_PARAM_NAME');
   }
-  return token;
+  return paramName;
 }
 
 export const handler = async (
   event: CloudFormationCustomResourceEvent,
 ): Promise<CloudFormationCustomResourceResponse> => {
   const props = getProperties(event);
-  const bot = new Bot(getBotToken());
   const secretToken = process.env.SECRET_TOKEN;
   const physicalId = `telegram-webhook-${props.WebhookUrl}`;
 
   try {
+    const token = await fetchBotToken({ paramName: getBotTokenParamName() });
+    const bot = new Bot(token);
+
     switch (event.RequestType) {
       case 'Create':
       case 'Update':

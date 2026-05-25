@@ -3,13 +3,22 @@ import { z } from 'zod';
 /**
  * Schema for environment variables required by the Lambda runtime.
  *
- * Keeping this in core/ means: zero AWS-CDK or grammy coupling, fully testable
- * with a plain `parseEnv({...})` call.
+ * Token values are NOT in here - they live in SSM Parameter Store and are
+ * fetched at cold start by `fetchSecrets()`. What is in here are the SSM
+ * parameter NAMES (so the Lambda knows where to look) plus the regular
+ * non-secret runtime config.
+ *
+ * Keeping this in core/ means: zero AWS-CDK or grammy coupling, fully
+ * testable with a plain `parseEnv({...})` call.
  */
 const lambdaEnvSchema = z.object({
-  BOT_TOKEN: z.string().min(1, 'BOT_TOKEN is required'),
-  LOGS_BOT_TOKEN: z.string().min(1, 'LOGS_BOT_TOKEN is required'),
-  LOGS_CHAT_ID: z.string().min(1, 'LOGS_CHAT_ID is required'),
+  BOT_TOKEN_PARAM_NAME: z.string().min(1, 'BOT_TOKEN_PARAM_NAME is required'),
+  LOGS_BOT_TOKEN_PARAM_NAME: z
+    .string()
+    .min(1, 'LOGS_BOT_TOKEN_PARAM_NAME is required'),
+  LOGS_CHAT_ID_PARAM_NAME: z
+    .string()
+    .min(1, 'LOGS_CHAT_ID_PARAM_NAME is required'),
   USERS_TABLE_NAME: z.string().min(1, 'USERS_TABLE_NAME is required'),
   AWS_REGION: z.string().min(1, 'AWS_REGION is required'),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),

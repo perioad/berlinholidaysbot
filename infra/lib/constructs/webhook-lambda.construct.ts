@@ -1,7 +1,8 @@
 import * as path from 'node:path';
 
-import { Duration, RemovalPolicy } from 'aws-cdk-lib';
+import { Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
+import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { FunctionUrlAuthType, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
@@ -13,15 +14,12 @@ export type WebhookLambdaProps = {
   timeoutSec: number;
   logRetentionDays: number;
   usersTable: Table;
-  /**
-   * SSM dynamic reference for the Telegram bot token. The value resolves
-   * server-side at deploy time, so the template only carries a pointer.
-   */
-  botToken: string;
-  /** SSM dynamic reference for the separate logs bot token. */
-  logsBotToken: string;
-  /** SSM dynamic reference for the chat id the logs bot posts to. */
-  logsChatId: string;
+  /** SSM parameter name (not value) for the main bot token. */
+  botTokenParamName: string;
+  /** SSM parameter name (not value) for the logs bot token. */
+  logsBotTokenParamName: string;
+  /** SSM parameter name (not value) for the logs chat id. */
+  logsChatIdParamName: string;
   /** Optional Telegram webhook secret (plain string from app config). */
   telegramWebhookSecret?: string;
   /** debug | info | warn | error. */
@@ -33,13 +31,18 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 /**
  * Lambda that serves the Telegram webhook plus its public Function URL.
  *
- * Function URLs give Lambda a direct public HTTPS endpoint - no API Gateway,
- * no $3.50/M request charge, no extra moving part. Auth is `NONE` because
- * Telegram is the only caller and we verify the `secret_token` header inside
- * the handler (see grammy `webhookCallback({ secretToken })`).
+ * Function URLs give Lambda a direct public HTTPS endpoint - no API
+ * Gateway, no $3.50/M request charge, no extra moving part. Auth is `NONE`
+ * because Telegram is the only caller and we verify the `secret_token`
+ * header inside the handler (see grammy `webhookCallback({ secretToken })`).
  *
- * `@aws-sdk/*` is excluded from the bundle because Lambda's Node 20 runtime
- * ships SDK v3 out of the box.
+ * Secrets are fetched from SSM Parameter Store at Lambda cold start (see
+ * `src/core/config/secrets.ts`) - they're NOT injected via env vars,
+ * because CloudFormation doesn't support `ssm-secure` dynamic references
+ * in Lambda env vars.
+ *
+ * `@aws-sdk/*` is excluded from the bundle because Lambda's Node 20
+ * runtime ships SDK v3 (including @aws-sdk/client-ssm) out of the box.
  */
 export class WebhookLambda extends Construct {
   readonly function: NodejsFunction;
@@ -72,9 +75,9 @@ export class WebhookLambda extends Construct {
         externalModules: ['@aws-sdk/*'],
       },
       environment: {
-        BOT_TOKEN: props.botToken,
-        LOGS_BOT_TOKEN: props.logsBotToken,
-        LOGS_CHAT_ID: props.logsChatId,
+        BOT_TOKEN_PARAM_NAME: props.botTokenParamName,
+        LOGS_BOT_TOKEN_PARAM_NAME: props.logsBotTokenParamName,
+        LOGS_CHAT_ID_PARAM_NAME: props.logsChatIdParamName,
         USERS_TABLE_NAME: props.usersTable.tableName,
         LOG_LEVEL: props.logLevel,
         ...(props.telegramWebhookSecret
@@ -85,11 +88,56 @@ export class WebhookLambda extends Construct {
 
     props.usersTable.grantReadWriteData(this.function);
 
+    grantSsmSecureRead(this.function, [
+      props.botTokenParamName,
+      props.logsBotTokenParamName,
+      props.logsChatIdParamName,
+    ]);
+
     const functionUrl = this.function.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE,
     });
     this.url = functionUrl.url;
   }
+}
+
+/**
+ * Grants the Lambda role the minimum permissions it needs to read SSM
+ * SecureString parameters: GetParameter(s) on the specific parameter ARNs
+ * and KMS Decrypt scoped to the SSM service via `kms:ViaService` (so the
+ * role can't decrypt unrelated KMS-encrypted data even if the key allows
+ * it for other reasons).
+ */
+function grantSsmSecureRead(
+  lambda: NodejsFunction,
+  parameterNames: string[],
+): void {
+  const { region, account } = Stack.of(lambda);
+
+  const parameterArns = parameterNames.map(
+    name => `arn:aws:ssm:${region}:${account}:parameter${name}`,
+  );
+
+  lambda.addToRolePolicy(
+    new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['ssm:GetParameter', 'ssm:GetParameters'],
+      resources: parameterArns,
+    }),
+  );
+
+  lambda.addToRolePolicy(
+    new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['kms:Decrypt'],
+      resources: ['*'],
+      conditions: {
+        StringEquals: {
+          'kms:ViaService': `ssm.${region}.amazonaws.com`,
+        },
+      },
+    }),
+  );
 }
 
 function mapLogRetention(days: number): RetentionDays {

@@ -1,4 +1,4 @@
-import { CfnOutput, SecretValue, Stack, type StackProps } from 'aws-cdk-lib';
+import { CfnOutput, Stack, type StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 
 import type { AppConfig } from '../../config/app.config';
@@ -17,16 +17,11 @@ export type BerlinHolidaysBotStackProps = StackProps & {
  *
  *   UsersTable + WebhookLambda (Function URL) + WebhookRegistrar
  *
- * Token values come from SSM SecureString parameters via dynamic references
- * (see `appConfig.ssm`). `SecretValue.ssmSecure(name)` produces a token
- * that synthesizes to `{{resolve:ssm-secure:NAME}}` (latest version) -
- * CloudFormation resolves it server-side at deploy time when populating
- * each Lambda's env vars.
- *
- * `unsafeUnwrap()` is the explicit way to hand a SecretValue to APIs that
- * type their inputs as plain strings (Lambda env vars do). It does not
- * leak anything at synth time - the underlying value is still just the
- * dynamic reference string.
+ * Secrets are NOT passed into the stack as values - only the SSM
+ * parameter NAMES are. Each Lambda reads its own secrets at cold start
+ * via `fetchSecrets()` (see `src/core/config/secrets.ts`). This sidesteps
+ * the CloudFormation limitation that `{{resolve:ssm-secure:...}}` dynamic
+ * references are not supported in `AWS::Lambda::Function.Environment`.
  *
  * Adding a new lambda (e.g. cron, batch) is a matter of creating one more
  * construct and wiring it here - everything else stays untouched.
@@ -41,14 +36,6 @@ export class BerlinHolidaysBotStack extends Stack {
 
     const { config } = props;
 
-    const botToken = SecretValue.ssmSecure(config.ssm.botTokenName).unsafeUnwrap();
-    const logsBotToken = SecretValue.ssmSecure(
-      config.ssm.logsBotTokenName,
-    ).unsafeUnwrap();
-    const logsChatId = SecretValue.ssmSecure(
-      config.ssm.logsChatIdName,
-    ).unsafeUnwrap();
-
     const usersTable = new UsersTable(this, 'UsersTable', {
       tableName: config.dynamodb.usersTableName,
       retainOnDelete: false,
@@ -60,15 +47,15 @@ export class BerlinHolidaysBotStack extends Stack {
       timeoutSec: config.lambda.timeoutSec,
       logRetentionDays: config.lambda.logRetentionDays,
       usersTable: usersTable.table,
-      botToken,
-      logsBotToken,
-      logsChatId,
+      botTokenParamName: config.ssm.botTokenName,
+      logsBotTokenParamName: config.ssm.logsBotTokenName,
+      logsChatIdParamName: config.ssm.logsChatIdName,
       telegramWebhookSecret: config.telegram.webhookSecretToken,
       logLevel: props.logLevel ?? 'info',
     });
 
     new WebhookRegistrar(this, 'WebhookRegistrar', {
-      botToken,
+      botTokenParamName: config.ssm.botTokenName,
       webhookUrl: webhookLambda.url,
       secretToken: config.telegram.webhookSecretToken,
     });

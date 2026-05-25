@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { parseEnv } from '../../../src/core/config/env';
 
 const validEnv = {
-  BOT_TOKEN: 'bot-token',
-  LOGS_BOT_TOKEN: 'logs-token',
-  LOGS_CHAT_ID: '12345',
+  BOT_TOKEN_PARAM_NAME: '/berlinholidaysbot/bot-token',
+  LOGS_BOT_TOKEN_PARAM_NAME: '/berlinholidaysbot/logs-bot-token',
+  LOGS_CHAT_ID_PARAM_NAME: '/berlinholidaysbot/logs-chat-id',
   USERS_TABLE_NAME: 'users',
   AWS_REGION: 'eu-central-1',
 };
@@ -14,9 +14,11 @@ describe('parseEnv', () => {
   it('returns parsed values when all required vars are present', () => {
     const env = parseEnv(validEnv);
 
-    expect(env.BOT_TOKEN).toBe('bot-token');
-    expect(env.LOGS_BOT_TOKEN).toBe('logs-token');
-    expect(env.LOGS_CHAT_ID).toBe('12345');
+    expect(env.BOT_TOKEN_PARAM_NAME).toBe('/berlinholidaysbot/bot-token');
+    expect(env.LOGS_BOT_TOKEN_PARAM_NAME).toBe(
+      '/berlinholidaysbot/logs-bot-token',
+    );
+    expect(env.LOGS_CHAT_ID_PARAM_NAME).toBe('/berlinholidaysbot/logs-chat-id');
     expect(env.USERS_TABLE_NAME).toBe('users');
     expect(env.AWS_REGION).toBe('eu-central-1');
     expect(env.LOG_LEVEL).toBe('info');
@@ -33,9 +35,9 @@ describe('parseEnv', () => {
     expect(env.TELEGRAM_WEBHOOK_SECRET).toBe('shh');
   });
 
-  it('throws a descriptive error when BOT_TOKEN is missing', () => {
-    const partial = { ...validEnv, BOT_TOKEN: undefined };
-    expect(() => parseEnv(partial)).toThrowError(/BOT_TOKEN/);
+  it('throws a descriptive error when BOT_TOKEN_PARAM_NAME is missing', () => {
+    const partial = { ...validEnv, BOT_TOKEN_PARAM_NAME: undefined };
+    expect(() => parseEnv(partial)).toThrowError(/BOT_TOKEN_PARAM_NAME/);
   });
 
   it('throws when LOG_LEVEL is invalid', () => {
@@ -48,9 +50,9 @@ describe('parseEnv', () => {
     expect(() =>
       parseEnv({
         ...validEnv,
-        BOT_TOKEN: undefined,
-        LOGS_BOT_TOKEN: undefined,
+        BOT_TOKEN_PARAM_NAME: undefined,
+        LOGS_BOT_TOKEN_PARAM_NAME: undefined,
       }),
-    ).toThrowError(/BOT_TOKEN[\s\S]*LOGS_BOT_TOKEN/);
+    ).toThrowError(/BOT_TOKEN_PARAM_NAME[\s\S]*LOGS_BOT_TOKEN_PARAM_NAME/);
   });
 });
