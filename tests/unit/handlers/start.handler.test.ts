@@ -94,6 +94,47 @@ describe('startHandler', () => {
     expect(ctx.reply).toHaveBeenCalledTimes(1);
   });
 
+  it('only keeps January of next year (drops Feb+ from next-year fetch)', async () => {
+    const today = new Date();
+    const thisYear = today.getUTCFullYear();
+    const januaryNext: Holiday = {
+      date: `${thisYear + 1}-01-01`,
+      localName: 'Neujahr',
+      name: "New Year's Day",
+      global: true,
+      counties: null,
+    };
+    const februaryNext: Holiday = {
+      date: `${thisYear + 1}-02-15`,
+      localName: 'Should-Be-Dropped',
+      name: 'Should Be Dropped',
+      global: true,
+      counties: null,
+    };
+    const marchNext: Holiday = {
+      date: `${thisYear + 1}-03-08`,
+      localName: 'Internationaler Frauentag',
+      name: "International Women's Day",
+      global: false,
+      counties: ['DE-BE'],
+    };
+
+    const deps = makeDeps({
+      fetchHolidays: async year =>
+        year === thisYear + 1
+          ? [januaryNext, februaryNext, marchNext]
+          : [],
+    });
+    const ctx = ctxFor(7);
+
+    await createStartHandler(deps)(ctx);
+
+    const replyText = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[1]![0] as string;
+    expect(replyText).toContain('Neujahr');
+    expect(replyText).not.toContain('Should-Be-Dropped');
+    expect(replyText).not.toContain('Internationaler Frauentag');
+  });
+
   it('survives a fetchHolidays failure and notifies admin', async () => {
     const deps = makeDeps({
       fetchHolidays: async () => {

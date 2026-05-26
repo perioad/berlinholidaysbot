@@ -15,11 +15,13 @@ import { notifyAdmin } from '../notifications';
  * all command activity.
  *
  * New and reactivated users additionally receive a second message
- * containing the still-upcoming Berlin holidays for the current year
- * (plus next year, so late-December joiners aren't greeted with an
- * empty list). Already-active users skip the list — they've seen it
- * before, no need to repeat. Fetch failures are caught + reported to
- * admin but never break the welcome.
+ * containing the still-upcoming Berlin holidays for the current year,
+ * plus January of next year (so the Dec 25 + Dec 26 + Jan 1 cluster
+ * always shows up as a "Bridge day opportunity" no matter when in the
+ * year the user signs up, but without trailing 11 more months of
+ * next-year holidays for someone joining in January). Already-active
+ * users skip the list — they've seen it before. Fetch failures are
+ * caught + reported to admin but never break the welcome.
  */
 export function createStartHandler(deps: HandlerDependencies) {
   return async (ctx: CommandContext<Context>): Promise<void> => {
@@ -93,7 +95,15 @@ async function sendUpcomingHolidaysList(
       deps.fetchHolidays(year),
       deps.fetchHolidays(year + 1),
     ]);
-    const upcoming = upcomingFrom(keepBerlin([...thisYear, ...nextYear]), today);
+    // Keep only January of next year - that's enough to keep the
+    // Christmas + New Year bridge cluster intact in the welcome list.
+    const januaryNextYear = nextYear.filter(h =>
+      h.date.startsWith(`${year + 1}-01-`),
+    );
+    const upcoming = upcomingFrom(
+      keepBerlin([...thisYear, ...januaryNextYear]),
+      today,
+    );
     if (upcoming.length === 0) return;
 
     await ctx.reply(
