@@ -60,6 +60,24 @@ describe('createUserBroadcaster', () => {
     expect(sendMessage.mock.calls.map(c => c[1])).toEqual(['hi', 'hi', 'hi']);
   });
 
+  it('sends with parse_mode HTML and link previews disabled', async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+
+    const broadcaster = createUserBroadcaster({
+      bot: fakeBot(sendMessage),
+      users: createMockUsersRepository(),
+      logger: createSilentLogger(),
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await broadcaster.broadcast('<b>hi</b>', [user('1')]);
+
+    expect(sendMessage.mock.calls[0]![2]).toEqual({
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
+    });
+  });
+
   it('sleeps N-1 times between sends (skips the wait after the last user)', async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const sleep = vi.fn().mockResolvedValue(undefined);

@@ -75,9 +75,14 @@ describe('startHandler', () => {
     expect(deps.fetchHolidays).toHaveBeenCalledWith(thisYear);
     expect(deps.fetchHolidays).toHaveBeenCalledWith(thisYear + 1);
     expect(ctx.reply).toHaveBeenCalledTimes(2);
-    const secondCall = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[1]![0];
-    expect(secondCall).toContain('Upcoming Berlin public holidays:');
-    expect(secondCall).toContain('Neujahr');
+    const replyMock = ctx.reply as ReturnType<typeof vi.fn>;
+    const secondCall = replyMock.mock.calls[1]!;
+    expect(secondCall[0]).toContain('Upcoming Berlin public holidays:');
+    expect(secondCall[0]).toContain('Neujahr');
+    expect(secondCall[1]).toEqual({
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
+    });
   });
 
   it('does not send a list when there are no upcoming holidays', async () => {

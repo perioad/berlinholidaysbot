@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  groupByBridges,
   pickAnnualReminder,
   pickThresholdReminder,
   upcomingFrom,
@@ -125,6 +126,70 @@ describe('pickAnnualReminder', () => {
     expect(
       pickAnnualReminder([h('2027-01-01', 'Neujahr')], utc('2026-01-03')),
     ).toBeNull();
+  });
+});
+
+describe('groupByBridges', () => {
+  it('returns [] for an empty list', () => {
+    expect(groupByBridges([])).toEqual([]);
+  });
+
+  it('keeps a single holiday as a one-element singleton group', () => {
+    const result = groupByBridges([h('2026-01-01', 'Neujahr')]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toHaveLength(1);
+  });
+
+  it('joins consecutive holidays within 7 days into one group', () => {
+    const result = groupByBridges([
+      h('2026-04-03', 'Karfreitag'),
+      h('2026-04-06', 'Ostermontag'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.map(x => x.date)).toEqual(['2026-04-03', '2026-04-06']);
+  });
+
+  it('chains 3 holidays as long as each adjacent gap is <= 7 days', () => {
+    // 25 -> 26 = 1, 26 -> Jan 1 = 6, both within window
+    const result = groupByBridges([
+      h('2026-12-25'),
+      h('2026-12-26'),
+      h('2027-01-01'),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toHaveLength(3);
+  });
+
+  it('starts a new group when the gap exceeds 7 days', () => {
+    const result = groupByBridges([
+      h('2026-05-01'), // Tag der Arbeit
+      h('2026-05-06'), // Christi Himmelfahrt — gap 5
+      h('2026-05-17'), // Pfingstmontag — gap 11 (> 7), new group
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.map(x => x.date)).toEqual(['2026-05-01', '2026-05-06']);
+    expect(result[1]!.map(x => x.date)).toEqual(['2026-05-17']);
+  });
+
+  it('models the real user-reported sequence correctly', () => {
+    const list = [
+      h('2026-05-25', 'Pfingstmontag'),
+      h('2026-10-03', 'Tag der Deutschen Einheit'),
+      h('2026-12-25', 'Erster Weihnachtstag'),
+      h('2026-12-26', 'Zweiter Weihnachtstag'),
+      h('2027-01-01', 'Neujahr'),
+      h('2027-03-08', 'Frauentag'),
+      h('2027-03-26', 'Karfreitag'),
+      h('2027-03-29', 'Ostermontag'),
+      h('2027-05-01', 'Tag der Arbeit'),
+      h('2027-05-06', 'Christi Himmelfahrt'),
+      h('2027-05-17', 'Pfingstmontag'),
+      h('2027-10-03', 'Tag der Deutschen Einheit'),
+      h('2027-12-25', 'Erster Weihnachtstag'),
+      h('2027-12-26', 'Zweiter Weihnachtstag'),
+    ];
+    const lengths = groupByBridges(list).map(g => g.length);
+    expect(lengths).toEqual([1, 1, 3, 1, 2, 2, 1, 1, 2]);
   });
 });
 

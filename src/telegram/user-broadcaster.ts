@@ -32,6 +32,13 @@ export type CreateUserBroadcasterOptions = {
  * Sends the same message to a list of users sequentially, pacing the
  * outbound calls to stay under Telegram's ~30 msg/sec broadcast limit.
  *
+ * Messages go out with `parse_mode: 'HTML'` and link previews disabled -
+ * the cron formats its text via `holiday-messages.ts` which emits HTML
+ * with a Wikipedia link in it, and we don't want the preview card
+ * inflating every message. If a future caller needs plain text, the
+ * formatter just shouldn't include any tags - escaped HTML renders fine
+ * as plain content.
+ *
  * Per-recipient errors never throw out of `broadcast`:
  *   - HTTP 403 ("bot was blocked by the user") -> deactivate the user
  *     and continue. Telegram already tells us via `my_chat_member` when
@@ -56,7 +63,10 @@ export function createUserBroadcaster(
       for (let i = 0; i < recipients.length; i++) {
         const user = recipients[i]!;
         try {
-          await options.bot.api.sendMessage(user.id, text);
+          await options.bot.api.sendMessage(user.id, text, {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+          });
           sent++;
         } catch (error) {
           failed++;

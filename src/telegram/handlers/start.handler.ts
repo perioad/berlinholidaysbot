@@ -100,7 +100,12 @@ async function sendUpcomingHolidaysList(
       formatHolidayList({
         title: 'Upcoming Berlin public holidays:',
         holidays: upcoming,
+        today,
       }),
+      {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      },
     );
   } catch (error) {
     deps.logger.error('failed to send welcome holiday list', { error });

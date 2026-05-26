@@ -80,6 +80,7 @@ export async function runDailyHolidayCheck(
     const text = formatHolidayList({
       title: `Berlin public holidays in ${annual.year}:`,
       holidays: annual.holidays,
+      today,
     });
     const result = await deps.broadcaster.broadcast(text, users);
     await deps.adminNotifier.notify(

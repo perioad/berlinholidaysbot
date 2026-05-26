@@ -84,6 +84,34 @@ export function upcomingFrom(
   return berlinHolidays.filter(h => h.date >= cutoff);
 }
 
+/**
+ * Groups a sorted list of holidays into clusters where consecutive
+ * holidays are <= `BRIDGE_WINDOW_DAYS` apart. A cluster of size 1 means
+ * an isolated holiday with nothing nearby. A cluster of size >= 2 is a
+ * "bridge day opportunity" - the days between can be taken off to chain
+ * them into a longer break.
+ *
+ * Greedy walk: each holiday either extends the current cluster (if the
+ * gap to the previous one is in `(0, BRIDGE_WINDOW_DAYS]`) or starts a
+ * new cluster.
+ */
+export function groupByBridges(berlinHolidays: Holiday[]): Holiday[][] {
+  if (berlinHolidays.length === 0) return [];
+
+  const groups: Holiday[][] = [[berlinHolidays[0]!]];
+  for (let i = 1; i < berlinHolidays.length; i++) {
+    const prev = berlinHolidays[i - 1]!;
+    const curr = berlinHolidays[i]!;
+    const gap = daysBetween(parseUtcDate(prev.date), parseUtcDate(curr.date));
+    if (gap > 0 && gap <= BRIDGE_WINDOW_DAYS) {
+      groups[groups.length - 1]!.push(curr);
+    } else {
+      groups.push([curr]);
+    }
+  }
+  return groups;
+}
+
 function buildBridge(h1: Holiday, h2: Holiday): BridgeInfo | undefined {
   const d1 = parseUtcDate(h1.date);
   const d2 = parseUtcDate(h2.date);
