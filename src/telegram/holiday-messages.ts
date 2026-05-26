@@ -41,6 +41,14 @@ const SHOPS_CLOSED = 'most shops will be closed';
 const BRIDGE_WIKIPEDIA_URL = 'https://en.wiktionary.org/wiki/Br%C3%BCckentag';
 
 /**
+ * Berlin.de event calendar endpoint. Both `date_start` and `date_stop`
+ * use `DD.MM.YYYY` and we pin them to the same day so the result page
+ * shows only that day's events.
+ */
+const BERLIN_EVENTS_BASE_URL =
+  'https://www.berlin.de/land/kalender/index.php';
+
+/**
  * All formatters in this file emit Telegram HTML. Callers MUST send
  * with `parse_mode: 'HTML'` (and typically `link_preview_options.is_disabled`
  * to suppress the Wikipedia preview card). Supported tags: `<b>`, `<i>`,
@@ -69,10 +77,29 @@ export function formatHolidayReminder(
     case 7:
       return `${title} is one week away (<b>${friendly}</b>).`;
     case 3:
-      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.`;
+      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.\n\n\n${formatBerlinEventsLink(holiday.date)}`;
     case 1:
-      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!`;
+      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!\n\n\n${formatBerlinEventsLink(holiday.date)}`;
   }
+}
+
+/**
+ * Renders a one-liner pointing users at the Berlin.de event calendar
+ * filtered to a specific day. Appended to the 3-day and 1-day
+ * reminders so people have something concrete to do on the holiday.
+ */
+function formatBerlinEventsLink(yyyyMmDd: string): string {
+  return `See what's happening that day: <a href="${berlinEventsUrl(yyyyMmDd)}">browse events on berlin.de</a>.`;
+}
+
+/**
+ * Builds a Berlin.de calendar URL pinned to a single day. The site
+ * expects `DD.MM.YYYY` for both `date_start` and `date_stop`.
+ */
+function berlinEventsUrl(yyyyMmDd: string): string {
+  const [y, m, d] = yyyyMmDd.split('-');
+  const german = `${d}.${m}.${y}`;
+  return `${BERLIN_EVENTS_BASE_URL}?date_start=${german}&date_stop=${german}`;
 }
 
 const BRIDGE_LABEL = `<a href="${BRIDGE_WIKIPEDIA_URL}">Bridge day</a> opportunity:`;

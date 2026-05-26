@@ -66,18 +66,36 @@ describe('formatHolidayReminder', () => {
     );
   });
 
-  it('3 day reminder mentions shops closing', () => {
+  it('3 day reminder mentions shops closing and links to Berlin events', () => {
     const out = formatHolidayReminder(3, KARFREITAG);
     expect(out).toContain('in 3 days');
     expect(out).toContain('shops will be closed');
     expect(out).toContain(KARFREITAG_TITLE);
+    expect(out).toContain(
+      '<a href="https://www.berlin.de/land/kalender/index.php?date_start=03.04.2026&date_stop=03.04.2026">browse events on berlin.de</a>',
+    );
   });
 
-  it('1 day reminder mentions tomorrow and shops closing', () => {
+  it('1 day reminder mentions tomorrow, shops closing, and links to Berlin events', () => {
     const out = formatHolidayReminder(1, KARFREITAG);
     expect(out).toContain('tomorrow');
     expect(out).toContain('shops will be closed');
     expect(out).toContain(KARFREITAG_TITLE);
+    expect(out).toContain(
+      '<a href="https://www.berlin.de/land/kalender/index.php?date_start=03.04.2026&date_stop=03.04.2026">browse events on berlin.de</a>',
+    );
+  });
+
+  it('separates the events link from the main reminder with two blank lines', () => {
+    const out = formatHolidayReminder(3, KARFREITAG);
+    expect(out).toMatch(
+      /shops will be closed\.\n\n\nSee what's happening that day:/,
+    );
+  });
+
+  it('does not append the events link to 30 or 7 day reminders', () => {
+    expect(formatHolidayReminder(30, KARFREITAG)).not.toContain('berlin.de');
+    expect(formatHolidayReminder(7, KARFREITAG)).not.toContain('berlin.de');
   });
 
   it('shows only localName when it equals name (avoids "X / X" duplication)', () => {
