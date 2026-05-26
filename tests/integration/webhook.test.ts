@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UsersRepository } from '../../src/core/database/users-repository';
 import { buildNewUser, type BotUser } from '../../src/core/domain/user';
+import type { Holiday } from '../../src/core/holidays/types';
 import { createBot } from '../../src/telegram/bot-factory';
 import {
   createMockAdminNotifier,
+  createMockUsersRepository,
   createSilentLogger,
 } from '../helpers/mocks';
 
@@ -30,7 +32,12 @@ type OutgoingCall = {
   payload: unknown;
 };
 
-function buildHarness(opts: { usersOverride?: Partial<UsersRepository> } = {}) {
+type BuildHarnessOptions = {
+  usersOverride?: Partial<UsersRepository>;
+  fetchHolidays?: (year: number) => Promise<Holiday[]>;
+};
+
+function buildHarness(opts: BuildHarnessOptions = {}) {
   const calls: OutgoingCall[] = [];
 
   const captureTransformer: Transformer = async (prev, method, payload) => {
@@ -54,15 +61,12 @@ function buildHarness(opts: { usersOverride?: Partial<UsersRepository> } = {}) {
     return { ok: true, result: true } as Awaited<ReturnType<typeof prev>>;
   };
 
-  const users: UsersRepository = {
-    getById: vi.fn().mockResolvedValue(null),
-    save: vi.fn().mockResolvedValue(undefined),
-    reactivate: vi.fn().mockResolvedValue(undefined),
-    deactivate: vi.fn().mockResolvedValue(undefined),
-    ...opts.usersOverride,
-  };
+  const users = createMockUsersRepository(opts.usersOverride);
 
   const adminNotifier = createMockAdminNotifier();
+  const fetchHolidays = vi
+    .fn<(year: number) => Promise<Holiday[]>>()
+    .mockImplementation(opts.fetchHolidays ?? (async () => []));
 
   const bot = new Bot('test-token', { botInfo: BOT_INFO });
   bot.api.config.use(captureTransformer);
@@ -75,10 +79,11 @@ function buildHarness(opts: { usersOverride?: Partial<UsersRepository> } = {}) {
       adminNotifier,
       logger: createSilentLogger(),
       buildUser: buildNewUser,
+      fetchHolidays,
     },
   });
 
-  return { bot, calls, users, adminNotifier };
+  return { bot, calls, users, adminNotifier, fetchHolidays };
 }
 
 const ACTIVE_USER: BotUser = {
@@ -163,9 +168,49 @@ describe('webhook integration', () => {
     expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(/^New user:/);
   });
 
-  it('on /start (inactive user): reactivates and notifies admin', async () => {
+  it('on /start (new user) with upcoming holidays: sends a second message with the list', async () => {
+    const thisYear = new Date().getUTCFullYear();
+    const futureHoliday: Holiday = {
+      date: `${thisYear + 1}-01-01`,
+      localName: 'Neujahr',
+      name: "New Year's Day",
+      global: true,
+      counties: null,
+    };
+
+    const { bot, calls, fetchHolidays } = buildHarness({
+      fetchHolidays: async year =>
+        year === thisYear + 1 ? [futureHoliday] : [],
+    });
+
+    await bot.handleUpdate(startUpdate());
+
+    expect(fetchHolidays).toHaveBeenCalledWith(thisYear);
+    expect(fetchHolidays).toHaveBeenCalledWith(thisYear + 1);
+
+    const sends = calls.filter(c => c.method === 'sendMessage');
+    expect(sends).toHaveLength(2);
+    expect((sends[0]!.payload as { text: string }).text).toBe('hello world');
+    expect((sends[1]!.payload as { text: string }).text).toContain(
+      'Upcoming Berlin public holidays:',
+    );
+    expect((sends[1]!.payload as { text: string }).text).toContain('Neujahr');
+  });
+
+  it('on /start (inactive user): reactivates, replies "welcome back" and sends the holiday list', async () => {
+    const thisYear = new Date().getUTCFullYear();
+    const futureHoliday: Holiday = {
+      date: `${thisYear + 1}-01-01`,
+      localName: 'Neujahr',
+      name: "New Year's Day",
+      global: true,
+      counties: null,
+    };
+
     const { bot, calls, users, adminNotifier } = buildHarness({
       usersOverride: { getById: vi.fn().mockResolvedValue(INACTIVE_USER) },
+      fetchHolidays: async year =>
+        year === thisYear + 1 ? [futureHoliday] : [],
     });
 
     await bot.handleUpdate(startUpdate());
@@ -174,8 +219,12 @@ describe('webhook integration', () => {
     expect(users.save).not.toHaveBeenCalled();
 
     const sends = calls.filter(c => c.method === 'sendMessage');
-    expect(sends).toHaveLength(1);
+    expect(sends).toHaveLength(2);
     expect((sends[0]!.payload as { text: string }).text).toBe('Welcome back!');
+    expect((sends[1]!.payload as { text: string }).text).toContain(
+      'Upcoming Berlin public holidays:',
+    );
+    expect((sends[1]!.payload as { text: string }).text).toContain('Neujahr');
 
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
     expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(/^User reactivated:/);

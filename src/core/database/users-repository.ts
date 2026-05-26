@@ -18,6 +18,13 @@ export type UsersRepository = {
 
   /** Sets `isActive: false` and records an end timestamp. */
   deactivate: (id: string) => Promise<void>;
+
+  /**
+   * Returns every user currently flagged `isActive: true`. Backed by a
+   * paginated table scan in DynamoDB - cheap at pet-project scale, would
+   * need a GSI on `isActive` if user count ever grew large.
+   */
+  listActive: () => Promise<BotUser[]>;
 };
 
 /**

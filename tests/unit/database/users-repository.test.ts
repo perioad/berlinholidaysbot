@@ -9,15 +9,17 @@ function makeRepo() {
   const save = vi.fn();
   const reactivate = vi.fn();
   const deactivate = vi.fn();
+  const listActive = vi.fn();
 
   const repo: UsersRepository = {
     getById,
     save,
     reactivate,
     deactivate,
+    listActive,
   };
 
-  return { repo, getById, save, reactivate, deactivate };
+  return { repo, getById, save, reactivate, deactivate, listActive };
 }
 
 const snapshot = { id: 7, is_bot: false } as const;

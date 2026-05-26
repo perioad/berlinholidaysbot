@@ -2,6 +2,7 @@ import { CfnOutput, Stack, type StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 
 import type { AppConfig } from '../../config/app.config';
+import { CronLambda } from './constructs/cron-lambda.construct';
 import { UsersTable } from './constructs/users-table.construct';
 import { WebhookLambda } from './constructs/webhook-lambda.construct';
 
@@ -60,11 +61,31 @@ export class BerlinHolidaysBotStack extends Stack {
       logLevel: props.logLevel ?? 'info',
     });
 
+    const cronLambda = new CronLambda(this, 'CronLambda', {
+      functionName: config.cron.functionName,
+      memoryMb: config.cron.memoryMb,
+      timeoutSec: config.cron.timeoutSec,
+      logRetentionDays: config.cron.logRetentionDays,
+      scheduleExpression: config.cron.scheduleExpression,
+      usersTable: usersTable.table,
+      botTokenParamName: config.ssm.botTokenName,
+      logsBotTokenParamName: config.ssm.logsBotTokenName,
+      logsChatIdParamName: config.ssm.logsChatIdName,
+      logLevel: props.logLevel ?? 'info',
+    });
+
     new CfnOutput(this, 'WebhookUrl', {
       value: webhookLambda.url,
       description:
         'URL Telegram POSTs updates to. After first deploy, register it ' +
         'with Telegram via the curl in AGENTS.md > Webhook registration.',
+    });
+
+    new CfnOutput(this, 'CronFunctionName', {
+      value: cronLambda.function.functionName,
+      description:
+        'Daily holiday-reminder Lambda. Triggered by EventBridge schedule ' +
+        `${config.cron.scheduleExpression}.`,
     });
 
     new CfnOutput(this, 'UsersTableName', {

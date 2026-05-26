@@ -10,6 +10,7 @@ import { parseEnv } from '../../src/core/config/env';
 import { fetchSecrets } from '../../src/core/config/secrets';
 import { createDynamoUsersRepository } from '../../src/core/database/dynamo-users-repository';
 import { buildNewUser } from '../../src/core/domain/user';
+import { fetchHolidaysFromNager } from '../../src/core/holidays/nager-client';
 import { createLogger } from '../../src/core/logger/logger';
 import { withTimeout } from '../../src/core/util/with-timeout';
 import { createBot } from '../../src/telegram/bot-factory';
@@ -66,6 +67,7 @@ async function buildHandler(): Promise<WebhookHandler> {
       adminNotifier,
       logger,
       buildUser: buildNewUser,
+      fetchHolidays: fetchHolidaysFromNager,
     },
   });
 

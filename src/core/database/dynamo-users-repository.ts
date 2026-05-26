@@ -3,6 +3,7 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 
@@ -83,6 +84,28 @@ export function createDynamoUsersRepository(
           },
         }),
       );
+    },
+
+    async listActive() {
+      const all: BotUser[] = [];
+      let exclusiveStartKey: Record<string, unknown> | undefined;
+
+      do {
+        const page = await client.send(
+          new ScanCommand({
+            TableName: tableName,
+            FilterExpression: 'isActive = :true',
+            ExpressionAttributeValues: { ':true': true },
+            ExclusiveStartKey: exclusiveStartKey,
+          }),
+        );
+        if (page.Items) {
+          all.push(...(page.Items as BotUser[]));
+        }
+        exclusiveStartKey = page.LastEvaluatedKey;
+      } while (exclusiveStartKey);
+
+      return all;
     },
   };
 }

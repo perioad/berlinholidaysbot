@@ -1,6 +1,7 @@
 import type { AdminNotifier } from '../core/admin/admin-notifier';
 import type { UsersRepository } from '../core/database/users-repository';
 import type { BotUser, TelegramUserSnapshot } from '../core/domain/user';
+import type { Holiday } from '../core/holidays/types';
 import type { Logger } from '../core/logger/logger';
 
 /**
@@ -17,4 +18,11 @@ export type HandlerDependencies = {
   adminNotifier: AdminNotifier;
   logger: Logger;
   buildUser: (snapshot: TelegramUserSnapshot) => BotUser;
+  /**
+   * Fetches Berlin-relevant filtering is the caller's job; this returns the
+   * raw country-level list from the holidays provider for one year. The
+   * indirection lets handlers/tests inject a fake without depending on the
+   * Nager HTTP client directly.
+   */
+  fetchHolidays: (year: number) => Promise<Holiday[]>;
 };

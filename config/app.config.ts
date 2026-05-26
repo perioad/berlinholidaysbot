@@ -13,6 +13,18 @@ export type LambdaConfig = {
   logRetentionDays: number;
 };
 
+export type CronConfig = LambdaConfig & {
+  /**
+   * EventBridge cron expression. The `cron(...)` syntax has 6 fields:
+   * minute hour day-of-month month day-of-week year. Either `day-of-month`
+   * or `day-of-week` must be `?` (mutually exclusive).
+   *
+   * Default `cron(0 10 * * ? *)` = every day at 10:00 UTC (midday Berlin
+   * time year-round, well away from the day boundary in both DST regimes).
+   */
+  scheduleExpression: string;
+};
+
 export type DynamoConfig = {
   usersTableName: string;
 };
@@ -48,6 +60,7 @@ export type SsmConfig = {
 export type AppConfig = {
   stackName: string;
   lambda: LambdaConfig;
+  cron: CronConfig;
   dynamodb: DynamoConfig;
   telegram: TelegramConfig;
   ssm: SsmConfig;
@@ -60,6 +73,13 @@ export const appConfig: AppConfig = {
     memoryMb: 256,
     timeoutSec: 15,
     logRetentionDays: 30,
+  },
+  cron: {
+    functionName: 'berlin-holidays-bot-cron',
+    memoryMb: 256,
+    timeoutSec: 300,
+    logRetentionDays: 30,
+    scheduleExpression: 'cron(0 10 * * ? *)',
   },
   dynamodb: {
     usersTableName: 'berlin-holidays-bot-users',

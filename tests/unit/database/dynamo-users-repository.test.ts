@@ -2,6 +2,7 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  ScanCommand,
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { mockClient } from 'aws-sdk-client-mock';
@@ -117,5 +118,53 @@ describe('createDynamoUsersRepository', () => {
         ':now': '2030-06-01T12:00:00.000Z',
       },
     });
+  });
+
+  it('listActive scans with the isActive filter and returns all items', async () => {
+    const userA: BotUser = {
+      id: '1',
+      isActive: true,
+      isBot: false,
+      isPremium: false,
+      languageCode: 'en',
+      firstName: 'Ada',
+      lastName: '',
+      username: '',
+      startDate: '2025-01-01T00:00:00.000Z',
+    };
+    const userB: BotUser = { ...userA, id: '2', firstName: 'Bea' };
+
+    docMock.on(ScanCommand).resolves({ Items: [userA, userB] });
+
+    await expect(repo.listActive()).resolves.toEqual([userA, userB]);
+
+    const call = docMock.commandCalls(ScanCommand)[0]!;
+    expect(call.args[0].input).toMatchObject({
+      TableName: TABLE,
+      FilterExpression: 'isActive = :true',
+      ExpressionAttributeValues: { ':true': true },
+    });
+  });
+
+  it('listActive paginates through LastEvaluatedKey until exhausted', async () => {
+    const page1 = [{ id: '1', isActive: true } as unknown as BotUser];
+    const page2 = [{ id: '2', isActive: true } as unknown as BotUser];
+
+    docMock
+      .on(ScanCommand)
+      .resolvesOnce({ Items: page1, LastEvaluatedKey: { id: '1' } })
+      .resolvesOnce({ Items: page2 });
+
+    const result = await repo.listActive();
+    expect(result.map(u => u.id)).toEqual(['1', '2']);
+
+    const calls = docMock.commandCalls(ScanCommand);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.args[0].input.ExclusiveStartKey).toEqual({ id: '1' });
+  });
+
+  it('listActive returns [] when the table is empty', async () => {
+    docMock.on(ScanCommand).resolves({});
+    await expect(repo.listActive()).resolves.toEqual([]);
   });
 });

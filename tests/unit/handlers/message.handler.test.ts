@@ -5,20 +5,17 @@ import { buildNewUser } from '../../../src/core/domain/user';
 import { createMessageHandler } from '../../../src/telegram/handlers/message.handler';
 import {
   createMockAdminNotifier,
+  createMockUsersRepository,
   createSilentLogger,
 } from '../../helpers/mocks';
 
 function makeDeps() {
   return {
-    users: {
-      getById: vi.fn(),
-      save: vi.fn(),
-      reactivate: vi.fn(),
-      deactivate: vi.fn(),
-    },
+    users: createMockUsersRepository(),
     adminNotifier: createMockAdminNotifier(),
     logger: createSilentLogger(),
     buildUser: buildNewUser,
+    fetchHolidays: vi.fn().mockResolvedValue([]),
   };
 }
 

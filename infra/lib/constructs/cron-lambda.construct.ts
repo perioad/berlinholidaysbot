@@ -2,7 +2,9 @@ import * as path from 'node:path';
 
 import { Duration, RemovalPolicy } from 'aws-cdk-lib';
 import { Table } from 'aws-cdk-lib/aws-dynamodb';
-import { FunctionUrlAuthType, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
+import { Rule, Schedule } from 'aws-cdk-lib/aws-events';
+import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
+import { Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction, OutputFormat } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { LogGroup } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
@@ -10,47 +12,40 @@ import { Construct } from 'constructs';
 import { grantSsmSecureRead } from '../iam/ssm-secure-read';
 import { mapLogRetention } from '../util/log-retention';
 
-export type WebhookLambdaProps = {
+export type CronLambdaProps = {
   functionName: string;
   memoryMb: number;
+  /** Lambda execution timeout in seconds. ~300 leaves headroom for ~750 users. */
   timeoutSec: number;
   logRetentionDays: number;
+  /** EventBridge cron expression, e.g. `cron(0 10 * * ? *)` for daily 10:00 UTC. */
+  scheduleExpression: string;
   usersTable: Table;
-  /** SSM parameter name (not value) for the main bot token. */
   botTokenParamName: string;
-  /** SSM parameter name (not value) for the logs bot token. */
   logsBotTokenParamName: string;
-  /** SSM parameter name (not value) for the logs chat id. */
   logsChatIdParamName: string;
-  /** Optional Telegram webhook secret (plain string from app config). */
-  telegramWebhookSecret?: string;
-  /** debug | info | warn | error. */
   logLevel: string;
 };
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 /**
- * Lambda that serves the Telegram webhook plus its public Function URL.
+ * Daily holiday-reminder Lambda triggered by an EventBridge schedule.
  *
- * Function URLs give Lambda a direct public HTTPS endpoint - no API
- * Gateway, no $3.50/M request charge, no extra moving part. Auth is `NONE`
- * because Telegram is the only caller and we verify the `secret_token`
- * header inside the handler (see grammy `webhookCallback({ secretToken })`).
+ * Unlike the webhook Lambda there is no Function URL - this function is
+ * only ever invoked by EventBridge, so it has no public surface. It
+ * shares the webhook Lambda's SSM + DynamoDB grants because it talks to
+ * the same Telegram bots and reads the same user table.
  *
- * Secrets are fetched from SSM Parameter Store at Lambda cold start (see
- * `src/core/config/secrets.ts`) - they're NOT injected via env vars,
- * because CloudFormation doesn't support `ssm-secure` dynamic references
- * in Lambda env vars.
- *
- * `@aws-sdk/*` is excluded from the bundle because Lambda's Node 20
- * runtime ships SDK v3 (including @aws-sdk/client-ssm) out of the box.
+ * Memory is kept modest (default 256 MB) since the work is mostly I/O,
+ * but the timeout is much higher (default 300s) so the broadcaster can
+ * pace through a few hundred users without truncation.
  */
-export class WebhookLambda extends Construct {
+export class CronLambda extends Construct {
   readonly function: NodejsFunction;
-  readonly url: string;
+  readonly rule: Rule;
 
-  constructor(scope: Construct, id: string, props: WebhookLambdaProps) {
+  constructor(scope: Construct, id: string, props: CronLambdaProps) {
     super(scope, id);
 
     const logGroup = new LogGroup(this, 'LogGroup', {
@@ -66,7 +61,7 @@ export class WebhookLambda extends Construct {
       timeout: Duration.seconds(props.timeoutSec),
       logGroup,
       tracing: Tracing.ACTIVE,
-      entry: path.join(PROJECT_ROOT, 'lambdas', 'webhook', 'index.ts'),
+      entry: path.join(PROJECT_ROOT, 'lambdas', 'cron', 'index.ts'),
       handler: 'handler',
       depsLockFilePath: path.join(PROJECT_ROOT, 'package-lock.json'),
       bundling: {
@@ -82,9 +77,6 @@ export class WebhookLambda extends Construct {
         LOGS_CHAT_ID_PARAM_NAME: props.logsChatIdParamName,
         USERS_TABLE_NAME: props.usersTable.tableName,
         LOG_LEVEL: props.logLevel,
-        ...(props.telegramWebhookSecret
-          ? { TELEGRAM_WEBHOOK_SECRET: props.telegramWebhookSecret }
-          : {}),
       },
     });
 
@@ -96,9 +88,9 @@ export class WebhookLambda extends Construct {
       props.logsChatIdParamName,
     ]);
 
-    const functionUrl = this.function.addFunctionUrl({
-      authType: FunctionUrlAuthType.NONE,
+    this.rule = new Rule(this, 'Schedule', {
+      schedule: Schedule.expression(props.scheduleExpression),
+      targets: [new LambdaFunction(this.function)],
     });
-    this.url = functionUrl.url;
   }
 }

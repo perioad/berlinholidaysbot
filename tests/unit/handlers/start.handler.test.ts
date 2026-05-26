@@ -1,28 +1,30 @@
 import type { CommandContext, Context } from 'grammy';
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildNewUser } from '../../../src/core/domain/user';
 import type { UsersRepository } from '../../../src/core/database/users-repository';
+import { buildNewUser } from '../../../src/core/domain/user';
+import type { Holiday } from '../../../src/core/holidays/types';
 import { createStartHandler } from '../../../src/telegram/handlers/start.handler';
 import {
   createMockAdminNotifier,
+  createMockUsersRepository,
   createSilentLogger,
 } from '../../helpers/mocks';
 
-function makeDeps(usersOverride?: Partial<UsersRepository>) {
-  const users: UsersRepository = {
-    getById: vi.fn().mockResolvedValue(null),
-    save: vi.fn().mockResolvedValue(undefined),
-    reactivate: vi.fn().mockResolvedValue(undefined),
-    deactivate: vi.fn().mockResolvedValue(undefined),
-    ...usersOverride,
-  };
+type DepsOverrides = {
+  users?: Partial<UsersRepository>;
+  fetchHolidays?: (year: number) => Promise<Holiday[]>;
+};
 
+function makeDeps(overrides: DepsOverrides = {}) {
   return {
-    users,
+    users: createMockUsersRepository(overrides.users),
     adminNotifier: createMockAdminNotifier(),
     logger: createSilentLogger(),
     buildUser: buildNewUser,
+    fetchHolidays: vi
+      .fn<(year: number) => Promise<Holiday[]>>()
+      .mockImplementation(overrides.fetchHolidays ?? (async () => [])),
   };
 }
 
@@ -52,19 +54,83 @@ describe('startHandler', () => {
     expect(ctx.reply).toHaveBeenCalledWith('hello world');
   });
 
-  it('reactivates an existing inactive user and notifies admin', async () => {
+  it('fetches both this year + next year for new users and replies with the upcoming list', async () => {
+    const today = new Date();
+    const thisYear = today.getUTCFullYear();
+    const futureHoliday: Holiday = {
+      date: `${thisYear + 1}-01-01`,
+      localName: 'Neujahr',
+      name: "New Year's Day",
+      global: true,
+      counties: null,
+    };
+
     const deps = makeDeps({
-      getById: vi.fn().mockResolvedValue({
-        id: '7',
-        isActive: false,
-        isBot: false,
-        isPremium: false,
-        languageCode: '',
-        firstName: '',
-        lastName: '',
-        username: '',
-        startDate: '2025-01-01T00:00:00.000Z',
-      }),
+      fetchHolidays: async year => (year === thisYear ? [] : [futureHoliday]),
+    });
+    const ctx = ctxFor(7);
+
+    await createStartHandler(deps)(ctx);
+
+    expect(deps.fetchHolidays).toHaveBeenCalledWith(thisYear);
+    expect(deps.fetchHolidays).toHaveBeenCalledWith(thisYear + 1);
+    expect(ctx.reply).toHaveBeenCalledTimes(2);
+    const secondCall = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[1]![0];
+    expect(secondCall).toContain('Upcoming Berlin public holidays:');
+    expect(secondCall).toContain('Neujahr');
+  });
+
+  it('does not send a list when there are no upcoming holidays', async () => {
+    const deps = makeDeps({ fetchHolidays: async () => [] });
+    const ctx = ctxFor(7);
+
+    await createStartHandler(deps)(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledTimes(1);
+  });
+
+  it('survives a fetchHolidays failure and notifies admin', async () => {
+    const deps = makeDeps({
+      fetchHolidays: async () => {
+        throw new Error('nager down');
+      },
+    });
+    const ctx = ctxFor(7);
+
+    await expect(createStartHandler(deps)(ctx)).resolves.toBeUndefined();
+    expect(ctx.reply).toHaveBeenCalledWith('hello world');
+    expect(deps.adminNotifier.notify).toHaveBeenCalledTimes(2); // user-joined + failure
+    const calls = deps.adminNotifier.notify.mock.calls.map(c => c[0]);
+    expect(calls.some(c => /Welcome holiday list failed/.test(c))).toBe(true);
+  });
+
+  it('reactivates an existing inactive user and also sends the upcoming holiday list', async () => {
+    const today = new Date();
+    const thisYear = today.getUTCFullYear();
+    const futureHoliday: Holiday = {
+      date: `${thisYear + 1}-01-01`,
+      localName: 'Neujahr',
+      name: "New Year's Day",
+      global: true,
+      counties: null,
+    };
+
+    const deps = makeDeps({
+      users: {
+        getById: vi.fn().mockResolvedValue({
+          id: '7',
+          isActive: false,
+          isBot: false,
+          isPremium: false,
+          languageCode: '',
+          firstName: '',
+          lastName: '',
+          username: '',
+          startDate: '2025-01-01T00:00:00.000Z',
+        }),
+      },
+      fetchHolidays: async year =>
+        year === thisYear + 1 ? [futureHoliday] : [],
     });
     const ctx = ctxFor(7);
 
@@ -76,22 +142,33 @@ describe('startHandler', () => {
     expect(deps.adminNotifier.notify.mock.calls[0]![0]).toMatch(
       /^User reactivated:/,
     );
-    expect(ctx.reply).toHaveBeenCalledWith('Welcome back!');
+
+    expect(ctx.reply).toHaveBeenCalledTimes(2);
+    expect((ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toBe(
+      'Welcome back!',
+    );
+    expect(
+      (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[1]![0],
+    ).toContain('Upcoming Berlin public holidays:');
+    expect(deps.fetchHolidays).toHaveBeenCalledWith(thisYear);
+    expect(deps.fetchHolidays).toHaveBeenCalledWith(thisYear + 1);
   });
 
-  it('replies "already subscribed" and notifies admin for active user', async () => {
+  it('replies "already subscribed" and does not send the holiday list', async () => {
     const deps = makeDeps({
-      getById: vi.fn().mockResolvedValue({
-        id: '7',
-        isActive: true,
-        isBot: false,
-        isPremium: false,
-        languageCode: '',
-        firstName: '',
-        lastName: '',
-        username: '',
-        startDate: '2025-01-01T00:00:00.000Z',
-      }),
+      users: {
+        getById: vi.fn().mockResolvedValue({
+          id: '7',
+          isActive: true,
+          isBot: false,
+          isPremium: false,
+          languageCode: '',
+          firstName: '',
+          lastName: '',
+          username: '',
+          startDate: '2025-01-01T00:00:00.000Z',
+        }),
+      },
     });
     const ctx = ctxFor(7);
 
@@ -99,12 +176,13 @@ describe('startHandler', () => {
 
     expect(deps.users.save).not.toHaveBeenCalled();
     expect(deps.users.reactivate).not.toHaveBeenCalled();
-
     expect(deps.adminNotifier.notify).toHaveBeenCalledOnce();
     expect(deps.adminNotifier.notify.mock.calls[0]![0]).toMatch(
       /^User ran \/start while already active:/,
     );
     expect(ctx.reply).toHaveBeenCalledWith('You are already subscribed!');
+    expect(ctx.reply).toHaveBeenCalledTimes(1);
+    expect(deps.fetchHolidays).not.toHaveBeenCalled();
   });
 
   it('logs a warning and returns when ctx.from is missing', async () => {
