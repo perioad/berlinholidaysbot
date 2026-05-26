@@ -152,7 +152,7 @@ describe('webhook integration', () => {
     vi.clearAllMocks();
   });
 
-  it('on /start (new user): saves user, notifies admin, replies welcome', async () => {
+  it('on /start (new user): saves user, notifies admin, replies with the greeting', async () => {
     const { bot, calls, users, adminNotifier } = buildHarness();
 
     await bot.handleUpdate(startUpdate());
@@ -162,7 +162,7 @@ describe('webhook integration', () => {
 
     const sends = calls.filter(c => c.method === 'sendMessage');
     expect(sends).toHaveLength(1);
-    expect((sends[0]!.payload as { text: string }).text).toBe('hello world');
+    expect((sends[0]!.payload as { text: string }).text).toBe('Hallöchen!');
 
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
     expect(adminNotifier.notify.mock.calls[0]![0]).toMatch(/^New user:/);
@@ -190,14 +190,14 @@ describe('webhook integration', () => {
 
     const sends = calls.filter(c => c.method === 'sendMessage');
     expect(sends).toHaveLength(2);
-    expect((sends[0]!.payload as { text: string }).text).toBe('hello world');
+    expect((sends[0]!.payload as { text: string }).text).toBe('Hallöchen!');
     expect((sends[1]!.payload as { text: string }).text).toContain(
       'Upcoming Berlin public holidays:',
     );
     expect((sends[1]!.payload as { text: string }).text).toContain('Neujahr');
   });
 
-  it('on /start (inactive user): reactivates, replies "welcome back" and sends the holiday list', async () => {
+  it('on /start (inactive user): reactivates, greets, and sends the holiday list', async () => {
     const thisYear = new Date().getUTCFullYear();
     const futureHoliday: Holiday = {
       date: `${thisYear + 1}-01-01`,
@@ -220,7 +220,7 @@ describe('webhook integration', () => {
 
     const sends = calls.filter(c => c.method === 'sendMessage');
     expect(sends).toHaveLength(2);
-    expect((sends[0]!.payload as { text: string }).text).toBe('Welcome back!');
+    expect((sends[0]!.payload as { text: string }).text).toBe('Hallöchen!');
     expect((sends[1]!.payload as { text: string }).text).toContain(
       'Upcoming Berlin public holidays:',
     );
@@ -252,14 +252,16 @@ describe('webhook integration', () => {
     );
   });
 
-  it('on any text message: replies "hello world" and notifies admin', async () => {
+  it('on any text message: replies with the chat-not-supported notice and notifies admin', async () => {
     const { bot, calls, adminNotifier } = buildHarness();
 
     await bot.handleUpdate(textUpdate('random chatter'));
 
     const sends = calls.filter(c => c.method === 'sendMessage');
     expect(sends).toHaveLength(1);
-    expect((sends[0]!.payload as { text: string }).text).toBe('hello world');
+    const reply = (sends[0]!.payload as { text: string }).text;
+    expect(reply).toContain("Chats aren't supported");
+    expect(reply).toContain('feedback');
 
     expect(adminNotifier.notify).toHaveBeenCalledOnce();
     const notification = adminNotifier.notify.mock.calls[0]![0];

@@ -29,14 +29,17 @@ function ctxFor(text: string): Filter<Context, 'message:text'> {
 }
 
 describe('messageHandler', () => {
-  it('replies with the welcome message', async () => {
+  it('replies with the "chat not supported" notice', async () => {
     const deps = makeDeps();
     const ctx = ctxFor('something');
 
     await createMessageHandler(deps)(ctx);
 
     expect(ctx.reply).toHaveBeenCalledOnce();
-    expect(ctx.reply).toHaveBeenCalledWith('hello world');
+    const reply = (ctx.reply as ReturnType<typeof vi.fn>).mock
+      .calls[0]![0] as string;
+    expect(reply).toContain("Chats aren't supported");
+    expect(reply).toContain('feedback');
   });
 
   it('notifies admin with the sender and the message text', async () => {

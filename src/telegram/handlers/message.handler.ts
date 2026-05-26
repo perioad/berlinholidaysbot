@@ -6,9 +6,9 @@ import { notifyAdmin } from '../notifications';
 
 /**
  * Any text message that is *not* a recognised command - replies with the
- * hardcoded greeting and forwards the user message to the admin channel so
- * the operator can see incoming traffic. Commands like /start are matched
- * earlier in the chain and do not fall through.
+ * "chat not supported" notice and forwards the user message to the admin
+ * channel so the operator still sees the feedback. Commands like /start
+ * are matched earlier in the chain and do not fall through.
  */
 export function createMessageHandler(deps: HandlerDependencies) {
   return async (ctx: Filter<Context, 'message:text'>): Promise<void> => {
@@ -23,6 +23,6 @@ export function createMessageHandler(deps: HandlerDependencies) {
       text: ctx.message.text,
     });
 
-    await ctx.reply(Messages.Welcome);
+    await ctx.reply(Messages.ChatNotSupported);
   };
 }

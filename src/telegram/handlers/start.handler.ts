@@ -77,11 +77,7 @@ export function createStartHandler(deps: HandlerDependencies) {
     }
 
     const reply =
-      status === 'already-active'
-        ? Messages.AlreadyActive
-        : status === 'reactivated'
-          ? Messages.WelcomeBack
-          : Messages.Welcome;
+      status === 'already-active' ? Messages.AlreadyActive : Messages.Greeting;
 
     await ctx.reply(reply);
 
