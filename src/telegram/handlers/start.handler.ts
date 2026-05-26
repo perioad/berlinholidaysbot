@@ -4,7 +4,10 @@ import { upsertOnStart } from '../../core/database/users-repository';
 import { keepBerlin } from '../../core/holidays/berlin-filter';
 import { upcomingFrom } from '../../core/holidays/bucketize';
 import type { HandlerDependencies } from '../dependencies';
-import { formatHolidayList } from '../holiday-messages';
+import {
+  formatHolidayList,
+  formatTodayHolidayGreeting,
+} from '../holiday-messages';
 import { Messages } from '../messages';
 import { notifyAdmin } from '../notifications';
 
@@ -19,9 +22,13 @@ import { notifyAdmin } from '../notifications';
  * plus January of next year (so the Dec 25 + Dec 26 + Jan 1 cluster
  * always shows up as a "Bridge day opportunity" no matter when in the
  * year the user signs up, but without trailing 11 more months of
- * next-year holidays for someone joining in January). Already-active
- * users skip the list — they've seen it before. Fetch failures are
- * caught + reported to admin but never break the welcome.
+ * next-year holidays for someone joining in January). When today
+ * itself is a Berlin public holiday, an additional "Today is X,
+ * congrats!" message with a Berlin.de events link is sent in front of
+ * the list, and today's entry is dropped from the list to avoid
+ * showing the same holiday twice. Already-active users skip both
+ * messages - they've seen them before. Fetch failures are caught and
+ * reported to admin but never break the welcome.
  */
 export function createStartHandler(deps: HandlerDependencies) {
   return async (ctx: CommandContext<Context>): Promise<void> => {
@@ -106,10 +113,24 @@ async function sendUpcomingHolidaysList(
     );
     if (upcoming.length === 0) return;
 
+    const todayIso = today.toISOString().slice(0, 10);
+    const todayHoliday =
+      upcoming[0]?.date === todayIso ? upcoming[0] : undefined;
+    const future = todayHoliday ? upcoming.slice(1) : upcoming;
+
+    if (todayHoliday) {
+      await ctx.reply(formatTodayHolidayGreeting(todayHoliday), {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      });
+    }
+
+    if (future.length === 0) return;
+
     await ctx.reply(
       formatHolidayList({
         title: 'Upcoming Berlin public holidays:',
-        holidays: upcoming,
+        holidays: future,
         today,
       }),
       {

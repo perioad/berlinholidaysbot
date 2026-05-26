@@ -77,19 +77,38 @@ export function formatHolidayReminder(
     case 7:
       return `${title} is one week away (<b>${friendly}</b>).`;
     case 3:
-      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.\n\n\n${formatBerlinEventsLink(holiday.date)}`;
+      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.\n\n${formatBerlinEventsLink(holiday.date)}`;
     case 1:
-      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!\n\n\n${formatBerlinEventsLink(holiday.date)}`;
+      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!\n\n${formatBerlinEventsLink(holiday.date)}`;
   }
 }
 
 /**
- * Renders a one-liner pointing users at the Berlin.de event calendar
- * filtered to a specific day. Appended to the 3-day and 1-day
- * reminders so people have something concrete to do on the holiday.
+ * Builds a celebratory standalone message for the user when today is
+ * already a Berlin public holiday. Used by the `/start` welcome flow
+ * as its own message in front of the upcoming-holidays list, so the
+ * "today" mention does not get visually buried inside a bullet list.
  */
-function formatBerlinEventsLink(yyyyMmDd: string): string {
-  return `See what's happening that day: <a href="${berlinEventsUrl(yyyyMmDd)}">browse events on berlin.de</a>.`;
+export function formatTodayHolidayGreeting(holiday: Holiday): string {
+  const title = formatHolidayTitle(holiday);
+  return `Today is ${title}, congrats!\n\n${formatBerlinEventsLink(holiday.date, 'today')}`;
+}
+
+/**
+ * Renders a one-liner pointing users at the Berlin.de event calendar
+ * filtered to a specific day. The `when` label controls the time
+ * phrasing in front of the link:
+ *
+ *   - `"that day"` (default) for messages about a future date, used
+ *     by the 3-day and 1-day reminders.
+ *   - `"today"` for messages anchored to the current date, used by
+ *     the "today is a public holiday" welcome greeting.
+ */
+function formatBerlinEventsLink(
+  yyyyMmDd: string,
+  when: 'today' | 'that day' = 'that day',
+): string {
+  return `See what's happening ${when}: <a href="${berlinEventsUrl(yyyyMmDd)}">browse events on berlin.de</a>.`;
 }
 
 /**
@@ -156,7 +175,7 @@ export function formatHolidayList(opts: {
   flushSingletons();
 
   if (sections.length === 0) return title;
-  return `${title}\n${sections.join('\n\n')}`;
+  return `${title}\n\n${sections.join('\n\n')}`;
 }
 
 function formatHolidayBullet(h: Holiday, today?: Date): string {

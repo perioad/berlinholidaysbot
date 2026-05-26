@@ -7,6 +7,7 @@ import type {
 import {
   formatHolidayList,
   formatHolidayReminder,
+  formatTodayHolidayGreeting,
 } from '../../../src/telegram/holiday-messages';
 
 const BRIDGE_LINK =
@@ -86,10 +87,10 @@ describe('formatHolidayReminder', () => {
     );
   });
 
-  it('separates the events link from the main reminder with two blank lines', () => {
+  it('separates the events link from the main reminder with a blank line', () => {
     const out = formatHolidayReminder(3, KARFREITAG);
     expect(out).toMatch(
-      /shops will be closed\.\n\n\nSee what's happening that day:/,
+      /shops will be closed\.\n\nSee what's happening that day:/,
     );
   });
 
@@ -149,6 +150,7 @@ describe('formatHolidayList', () => {
     expect(out).toBe(
       [
         '<b>Berlin public holidays in 2026:</b>',
+        '',
         `${BRIDGE_LINK} opportunity:`,
         `• Fri 3 Apr 2026 — ${KARFREITAG_TITLE}`,
         `• Mon 6 Apr 2026 — ${OSTERMONTAG_TITLE}`,
@@ -171,6 +173,7 @@ describe('formatHolidayList', () => {
     expect(out).toBe(
       [
         '<b>Upcoming Berlin public holidays:</b>',
+        '',
         '• Mon 25 May 2026 — <b><a href="https://en.wikipedia.org/wiki/Whit_Monday">Pfingstmontag / Whit Monday</a></b>',
       ].join('\n'),
     );
@@ -230,6 +233,7 @@ describe('formatHolidayList', () => {
     expect(out).toBe(
       [
         '<b>Upcoming Berlin public holidays:</b>',
+        '',
         '• Mon 25 May 2026 — <b><a href="https://en.wikipedia.org/wiki/Whit_Monday">Pfingstmontag / Whit Monday</a></b>',
         '',
         `${BRIDGE_LINK} opportunity:`,
@@ -244,6 +248,19 @@ describe('formatHolidayList', () => {
   it('returns only the bold title when the list is empty', () => {
     expect(formatHolidayList({ title: 'Title:', holidays: [] })).toBe(
       '<b>Title:</b>',
+    );
+  });
+});
+
+describe('formatTodayHolidayGreeting', () => {
+  it('greets with linked title, "congrats!", and a Berlin.de events link anchored to "today"', () => {
+    const out = formatTodayHolidayGreeting(KARFREITAG);
+    expect(out).toBe(
+      [
+        `Today is ${KARFREITAG_TITLE}, congrats!`,
+        '',
+        `See what's happening today: <a href="https://www.berlin.de/land/kalender/index.php?date_start=03.04.2026&date_stop=03.04.2026">browse events on berlin.de</a>.`,
+      ].join('\n'),
     );
   });
 });

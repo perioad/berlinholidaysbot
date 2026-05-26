@@ -85,6 +85,83 @@ describe('startHandler', () => {
     });
   });
 
+  // NOTE: the next two tests assume the handler treats "today" as
+  // 2026-10-03 because of the manual-testing hardcode in
+  // src/telegram/handlers/start.handler.ts. When that hardcode is
+  // reverted to `new Date()`, switch these dates back to the real
+  // current day (e.g. via `new Date().toISOString().slice(0, 10)`).
+  const HARDCODED_TODAY_ISO = '2026-10-03';
+  const HARDCODED_TODAY_YEAR = 2026;
+
+  it('sends a "today is X, congrats!" message before the list when today is a Berlin holiday, and drops today from the list', async () => {
+    const todayHoliday: Holiday = {
+      date: HARDCODED_TODAY_ISO,
+      localName: 'Today Test Holiday',
+      name: 'Today Test Holiday',
+      global: true,
+      counties: null,
+    };
+    const laterHoliday: Holiday = {
+      date: `${HARDCODED_TODAY_YEAR}-12-25`,
+      localName: 'Erster Weihnachtstag',
+      name: 'Christmas Day',
+      global: true,
+      counties: null,
+    };
+
+    const deps = makeDeps({
+      fetchHolidays: async year =>
+        year === HARDCODED_TODAY_YEAR ? [todayHoliday, laterHoliday] : [],
+    });
+    const ctx = ctxFor(7);
+
+    await createStartHandler(deps)(ctx);
+
+    const replyMock = ctx.reply as ReturnType<typeof vi.fn>;
+    expect(replyMock).toHaveBeenCalledTimes(3);
+
+    expect(replyMock.mock.calls[0]![0]).toBe('hello world');
+
+    const greeting = replyMock.mock.calls[1]![0] as string;
+    expect(greeting).toContain('Today is');
+    expect(greeting).toContain('Today Test Holiday');
+    expect(greeting).toContain('congrats!');
+    expect(greeting).toContain("See what's happening today:");
+    expect(greeting).toContain('browse events on berlin.de');
+    expect(replyMock.mock.calls[1]![1]).toEqual({
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
+    });
+
+    const list = replyMock.mock.calls[2]![0] as string;
+    expect(list).toContain('Upcoming Berlin public holidays:');
+    expect(list).toContain('Erster Weihnachtstag');
+    expect(list).not.toContain('Today Test Holiday');
+  });
+
+  it('skips the upcoming list when today is the only upcoming holiday', async () => {
+    const todayHoliday: Holiday = {
+      date: HARDCODED_TODAY_ISO,
+      localName: 'Today Test Holiday',
+      name: 'Today Test Holiday',
+      global: true,
+      counties: null,
+    };
+
+    const deps = makeDeps({
+      fetchHolidays: async year =>
+        year === HARDCODED_TODAY_YEAR ? [todayHoliday] : [],
+    });
+    const ctx = ctxFor(7);
+
+    await createStartHandler(deps)(ctx);
+
+    const replyMock = ctx.reply as ReturnType<typeof vi.fn>;
+    expect(replyMock).toHaveBeenCalledTimes(2);
+    expect(replyMock.mock.calls[0]![0]).toBe('hello world');
+    expect(replyMock.mock.calls[1]![0]).toContain('Today is');
+  });
+
   it('does not send a list when there are no upcoming holidays', async () => {
     const deps = makeDeps({ fetchHolidays: async () => [] });
     const ctx = ctxFor(7);
