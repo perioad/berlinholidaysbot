@@ -10,7 +10,7 @@ import {
 } from '../../../src/telegram/holiday-messages';
 
 const BRIDGE_LINK =
-  '<a href="https://en.wikipedia.org/wiki/Long_weekend">Bridge day</a>';
+  '<a href="https://en.wiktionary.org/wiki/Br%C3%BCckentag">Bridge day</a>';
 
 const KARFREITAG: Holiday = {
   date: '2026-04-03',
@@ -28,18 +28,23 @@ const OSTERMONTAG: Holiday = {
   counties: null,
 };
 
+const KARFREITAG_TITLE =
+  '<b><a href="https://en.wikipedia.org/wiki/Good_Friday">Karfreitag / Good Friday</a></b>';
+const OSTERMONTAG_TITLE =
+  '<b><a href="https://en.wikipedia.org/wiki/Easter_Monday">Ostermontag / Easter Monday</a></b>';
+
 describe('formatHolidayReminder', () => {
-  it('30 day reminder bolds the names and date', () => {
+  it('30 day reminder wraps the bold title in a Wikipedia link', () => {
     const out = formatHolidayReminder(30, KARFREITAG);
     expect(out).toBe(
-      "Heads up: in 30 days it's <b>Karfreitag</b> (<i>Good Friday</i>) on <b>Fri 3 Apr 2026</b>.",
+      `Heads up: in 30 days it's ${KARFREITAG_TITLE} on <b>Fri 3 Apr 2026</b>.`,
     );
   });
 
   it('30 day reminder with empty-weekdays bridge says "long weekend already"', () => {
     const bridge: BridgeInfo = { next: OSTERMONTAG, weekdaysBetween: [] };
     const out = formatHolidayReminder(30, KARFREITAG, bridge);
-    expect(out).toContain('<b>Ostermontag</b>');
+    expect(out).toContain(OSTERMONTAG_TITLE);
     expect(out).toContain('already have a long weekend');
   });
 
@@ -55,9 +60,9 @@ describe('formatHolidayReminder', () => {
     expect(out).toContain('Thu 9 Apr 2026');
   });
 
-  it('7 day reminder is a short heads-up', () => {
+  it('7 day reminder is a short heads-up with linked title', () => {
     expect(formatHolidayReminder(7, KARFREITAG)).toBe(
-      '<b>Karfreitag</b> is one week away (<b>Fri 3 Apr 2026</b>).',
+      `${KARFREITAG_TITLE} is one week away (<b>Fri 3 Apr 2026</b>).`,
     );
   });
 
@@ -65,33 +70,60 @@ describe('formatHolidayReminder', () => {
     const out = formatHolidayReminder(3, KARFREITAG);
     expect(out).toContain('in 3 days');
     expect(out).toContain('shops will be closed');
-    expect(out).toContain('<b>Karfreitag</b>');
+    expect(out).toContain(KARFREITAG_TITLE);
   });
 
   it('1 day reminder mentions tomorrow and shops closing', () => {
     const out = formatHolidayReminder(1, KARFREITAG);
     expect(out).toContain('tomorrow');
     expect(out).toContain('shops will be closed');
-    expect(out).toContain('<b>Karfreitag</b>');
+    expect(out).toContain(KARFREITAG_TITLE);
+  });
+
+  it('shows only localName when it equals name (avoids "X / X" duplication)', () => {
+    const same: Holiday = {
+      date: '2026-04-03',
+      localName: 'Tag der Arbeit',
+      name: 'Tag der Arbeit',
+      global: true,
+      counties: null,
+    };
+    const out = formatHolidayReminder(7, same);
+    expect(out).toContain(
+      '<b><a href="https://en.wikipedia.org/wiki/Tag_der_Arbeit">Tag der Arbeit</a></b>',
+    );
+    expect(out).not.toContain('Tag der Arbeit / Tag der Arbeit');
+  });
+
+  it('URL-encodes special characters in the link target', () => {
+    const ny: Holiday = {
+      date: '2026-01-01',
+      localName: 'Neujahr',
+      name: "New Year's Day",
+      global: true,
+      counties: null,
+    };
+    const out = formatHolidayReminder(30, ny);
+    expect(out).toContain(
+      `href="https://en.wikipedia.org/wiki/New_Year's_Day"`,
+    );
   });
 
   it('escapes HTML special chars in holiday names', () => {
     const evil: Holiday = {
       date: '2026-04-03',
       localName: 'A & B',
-      name: '<bad>',
+      name: 'C',
       global: true,
       counties: null,
     };
     const out = formatHolidayReminder(30, evil);
-    expect(out).toContain('A &amp; B');
-    expect(out).toContain('&lt;bad&gt;');
-    expect(out).not.toContain('<bad>');
+    expect(out).toContain('A &amp; B / C');
   });
 });
 
 describe('formatHolidayList', () => {
-  it('groups close-by holidays under a linked bridge-day label', () => {
+  it('groups close-by holidays under a linked bridge-day label, with linked titles', () => {
     const out = formatHolidayList({
       title: 'Berlin public holidays in 2026:',
       holidays: [KARFREITAG, OSTERMONTAG],
@@ -100,37 +132,28 @@ describe('formatHolidayList', () => {
       [
         '<b>Berlin public holidays in 2026:</b>',
         `${BRIDGE_LINK} opportunity:`,
-        '• Fri 3 Apr 2026 — <b>Karfreitag</b>',
-        '• Mon 6 Apr 2026 — <b>Ostermontag</b>',
+        `• Fri 3 Apr 2026 — ${KARFREITAG_TITLE}`,
+        `• Mon 6 Apr 2026 — ${OSTERMONTAG_TITLE}`,
       ].join('\n'),
     );
   });
 
-  it('renders isolated holidays as a plain bullet block (no label)', () => {
-    const isolatedA: Holiday = {
+  it('renders isolated holidays as a plain bullet block (no bridge label)', () => {
+    const pfingstmontag: Holiday = {
       date: '2026-05-25',
       localName: 'Pfingstmontag',
       name: 'Whit Monday',
       global: true,
       counties: null,
     };
-    const isolatedB: Holiday = {
-      date: '2026-10-03',
-      localName: 'Tag der Deutschen Einheit',
-      name: 'German Unity Day',
-      global: true,
-      counties: null,
-    };
-
     const out = formatHolidayList({
       title: 'Upcoming Berlin public holidays:',
-      holidays: [isolatedA, isolatedB],
+      holidays: [pfingstmontag],
     });
     expect(out).toBe(
       [
         '<b>Upcoming Berlin public holidays:</b>',
-        '• Mon 25 May 2026 — <b>Pfingstmontag</b>',
-        '• Sat 3 Oct 2026 — <b>Tag der Deutschen Einheit</b>',
+        '• Mon 25 May 2026 — <b><a href="https://en.wikipedia.org/wiki/Whit_Monday">Pfingstmontag / Whit Monday</a></b>',
       ].join('\n'),
     );
   });
@@ -149,7 +172,7 @@ describe('formatHolidayList', () => {
       today: new Date(Date.UTC(2026, 4, 25)),
     });
     expect(out).toContain(
-      '• <b>Today</b> (Mon 25 May 2026) — <b>Pfingstmontag</b>',
+      '• <b>Today</b> (Mon 25 May 2026) — <b><a href="https://en.wikipedia.org/wiki/Whit_Monday">Pfingstmontag / Whit Monday</a></b>',
     );
   });
 
@@ -189,13 +212,13 @@ describe('formatHolidayList', () => {
     expect(out).toBe(
       [
         '<b>Upcoming Berlin public holidays:</b>',
-        '• Mon 25 May 2026 — <b>Pfingstmontag</b>',
+        '• Mon 25 May 2026 — <b><a href="https://en.wikipedia.org/wiki/Whit_Monday">Pfingstmontag / Whit Monday</a></b>',
         '',
         `${BRIDGE_LINK} opportunity:`,
-        '• Fri 3 Apr 2026 — <b>Karfreitag</b>',
-        '• Mon 6 Apr 2026 — <b>Ostermontag</b>',
+        `• Fri 3 Apr 2026 — ${KARFREITAG_TITLE}`,
+        `• Mon 6 Apr 2026 — ${OSTERMONTAG_TITLE}`,
         '',
-        '• Sat 3 Oct 2026 — <b>Tag der Deutschen Einheit</b>',
+        '• Sat 3 Oct 2026 — <b><a href="https://en.wikipedia.org/wiki/German_Unity_Day">Tag der Deutschen Einheit / German Unity Day</a></b>',
       ].join('\n'),
     );
   });

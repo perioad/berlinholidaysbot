@@ -33,11 +33,12 @@ const MONTHS_SHORT = [
 const SHOPS_CLOSED = 'most shops will be closed';
 
 /**
- * Wikipedia article that describes the "Brückentag" / bridge-day idea.
- * The English-language article is `Long_weekend`; "Bridge day" itself
- * redirects to it.
+ * Wiktionary entry for "Brückentag" — covers the German term directly,
+ * with etymology and the cross-language synonyms (puente, faire le pont,
+ * Fenstertag). Better fit than the English Wikipedia "Long weekend"
+ * article, which is broader and buries the bridge-day concept.
  */
-const BRIDGE_WIKIPEDIA_URL = 'https://en.wikipedia.org/wiki/Long_weekend';
+const BRIDGE_WIKIPEDIA_URL = 'https://en.wiktionary.org/wiki/Br%C3%BCckentag';
 
 /**
  * All formatters in this file emit Telegram HTML. Callers MUST send
@@ -58,20 +59,19 @@ export function formatHolidayReminder(
   bridge?: BridgeInfo,
 ): string {
   const friendly = formatFriendlyDate(holiday.date);
-  const local = `<b>${escapeHtml(holiday.localName)}</b>`;
-  const english = `<i>${escapeHtml(holiday.name)}</i>`;
+  const title = formatHolidayTitle(holiday);
 
   switch (bucket) {
     case 30: {
-      const base = `Heads up: in 30 days it's ${local} (${english}) on <b>${friendly}</b>.`;
+      const base = `Heads up: in 30 days it's ${title} on <b>${friendly}</b>.`;
       return bridge ? `${base}\n\n${formatBridge(bridge)}` : base;
     }
     case 7:
-      return `${local} is one week away (<b>${friendly}</b>).`;
+      return `${title} is one week away (<b>${friendly}</b>).`;
     case 3:
-      return `${local} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.`;
+      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.`;
     case 1:
-      return `${local} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!`;
+      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!`;
   }
 }
 
@@ -134,11 +134,43 @@ export function formatHolidayList(opts: {
 
 function formatHolidayBullet(h: Holiday, today?: Date): string {
   const friendly = formatFriendlyDate(h.date);
-  const name = `<b>${escapeHtml(h.localName)}</b>`;
+  const title = formatHolidayTitle(h);
   if (today && isSameUtcDay(h.date, today)) {
-    return `• <b>Today</b> (${friendly}) — ${name}`;
+    return `• <b>Today</b> (${friendly}) — ${title}`;
   }
-  return `• ${friendly} — ${name}`;
+  return `• ${friendly} — ${title}`;
+}
+
+/**
+ * Renders a holiday as a bold, Wikipedia-linked title.
+ *
+ *   <b><a href="...wiki/Good_Friday">Karfreitag / Good Friday</a></b>
+ *
+ * The link target is the English `name` (which matches the English
+ * Wikipedia article title most of the time; Wikipedia redirects handle
+ * the rest). The visible text shows both the German `localName` and the
+ * English `name` separated by " / " - or just one of them when the API
+ * returns the same string for both fields.
+ */
+function formatHolidayTitle(h: Holiday): string {
+  const display =
+    h.localName === h.name ? h.localName : `${h.localName} / ${h.name}`;
+  return `<b><a href="${wikipediaUrl(h.name)}">${escapeHtml(display)}</a></b>`;
+}
+
+/**
+ * Builds an English Wikipedia article URL from a plain title:
+ *   "Good Friday"   -> https://en.wikipedia.org/wiki/Good_Friday
+ *   "New Year's Day" -> https://en.wikipedia.org/wiki/New_Year's_Day
+ *
+ * Spaces become underscores (Wikipedia's canonical form). Other
+ * non-ASCII / reserved chars are percent-encoded via `encodeURIComponent`.
+ * For titles that don't match exactly, Wikipedia transparently redirects
+ * (e.g. "Ascension Day" -> "Feast of the Ascension"); for unknown titles
+ * it shows a "create / search" landing page, which is still useful.
+ */
+function wikipediaUrl(name: string): string {
+  return `https://en.wikipedia.org/wiki/${encodeURIComponent(name).replace(/%20/g, '_')}`;
 }
 
 function isSameUtcDay(yyyyMmDd: string, today: Date): boolean {
@@ -150,13 +182,13 @@ function isSameUtcDay(yyyyMmDd: string, today: Date): boolean {
 
 function formatBridge(bridge: BridgeInfo): string {
   const nextFriendly = formatFriendlyDate(bridge.next.date);
-  const nextName = `<b>${escapeHtml(bridge.next.localName)}</b>`;
+  const nextTitle = formatHolidayTitle(bridge.next);
   if (bridge.weekdaysBetween.length === 0) {
-    return `${nextName} follows on <b>${nextFriendly}</b> — you already have a long weekend!`;
+    return `${nextTitle} follows on <b>${nextFriendly}</b> — you already have a long weekend!`;
   }
   const n = bridge.weekdaysBetween.length;
   const dayList = bridge.weekdaysBetween.map(formatFriendlyDate).join(', ');
-  return `${nextName} follows on <b>${nextFriendly}</b>. Take ${n} day${n === 1 ? '' : 's'} off (${dayList}) and you get an extended break.`;
+  return `${nextTitle} follows on <b>${nextFriendly}</b>. Take ${n} day${n === 1 ? '' : 's'} off (${dayList}) and you get an extended break.`;
 }
 
 /**
