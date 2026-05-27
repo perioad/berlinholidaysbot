@@ -29,6 +29,14 @@ const OSTERMONTAG: Holiday = {
   counties: null,
 };
 
+const TAG_DER_EINHEIT_SAT: Holiday = {
+  date: '2026-10-03',
+  localName: 'Tag der Deutschen Einheit',
+  name: 'German Unity Day',
+  global: true,
+  counties: null,
+};
+
 const KARFREITAG_TITLE =
   '<b><a href="https://en.wikipedia.org/wiki/Good_Friday">Karfreitag / Good Friday</a></b>';
 const OSTERMONTAG_TITLE =
@@ -139,6 +147,40 @@ describe('formatHolidayReminder', () => {
     const out = formatHolidayReminder(30, evil);
     expect(out).toContain('A &amp; B / C');
   });
+
+  it('appends the "no day off" note to weekend holidays in every bucket', () => {
+    for (const bucket of [30, 7, 3, 1] as const) {
+      const out = formatHolidayReminder(bucket, TAG_DER_EINHEIT_SAT);
+      expect(out).toContain("It's a weekend, unlucky, no day off for us.");
+    }
+  });
+
+  it('places the weekend note before the events link in 3-day and 1-day reminders', () => {
+    for (const bucket of [3, 1] as const) {
+      const out = formatHolidayReminder(bucket, TAG_DER_EINHEIT_SAT);
+      const noteAt = out.indexOf("It's a weekend");
+      const linkAt = out.indexOf('berlin.de');
+      expect(noteAt).toBeGreaterThanOrEqual(0);
+      expect(linkAt).toBeGreaterThan(noteAt);
+    }
+  });
+
+  it('does not append the weekend note to weekday holidays', () => {
+    for (const bucket of [30, 7, 3, 1] as const) {
+      expect(formatHolidayReminder(bucket, KARFREITAG)).not.toContain(
+        "It's a weekend",
+      );
+    }
+  });
+
+  it('keeps both the bridge hint and the weekend note on a 30-day reminder', () => {
+    const bridge: BridgeInfo = { next: OSTERMONTAG, weekdaysBetween: [] };
+    const out = formatHolidayReminder(30, TAG_DER_EINHEIT_SAT, bridge);
+    const bridgeAt = out.indexOf('already have a long weekend');
+    const noteAt = out.indexOf("It's a weekend");
+    expect(bridgeAt).toBeGreaterThan(0);
+    expect(noteAt).toBeGreaterThan(bridgeAt);
+  });
 });
 
 describe('formatHolidayList', () => {
@@ -240,7 +282,7 @@ describe('formatHolidayList', () => {
         `• Fri 3 Apr 2026 — ${KARFREITAG_TITLE}`,
         `• Mon 6 Apr 2026 — ${OSTERMONTAG_TITLE}`,
         '',
-        '• Sat 3 Oct 2026 — <b><a href="https://en.wikipedia.org/wiki/German_Unity_Day">Tag der Deutschen Einheit / German Unity Day</a></b>',
+        '• Sat 3 Oct 2026 — <b><a href="https://en.wikipedia.org/wiki/German_Unity_Day">Tag der Deutschen Einheit / German Unity Day</a></b> <i>(unlucky, no day off)</i>',
       ].join('\n'),
     );
   });
@@ -249,6 +291,19 @@ describe('formatHolidayList', () => {
     expect(formatHolidayList({ title: 'Title:', holidays: [] })).toBe(
       '<b>Title:</b>',
     );
+  });
+
+  it('marks weekend holidays inline with an italic "(unlucky, no day off)" suffix', () => {
+    const out = formatHolidayList({
+      title: 'List:',
+      holidays: [TAG_DER_EINHEIT_SAT],
+    });
+    expect(out).toContain('<i>(unlucky, no day off)</i>');
+  });
+
+  it('does not mark weekday holidays as unlucky', () => {
+    const out = formatHolidayList({ title: 'List:', holidays: [KARFREITAG] });
+    expect(out).not.toContain('unlucky');
   });
 });
 
@@ -261,6 +316,22 @@ describe('formatTodayHolidayGreeting', () => {
         '',
         `See what's happening today: <a href="https://www.berlin.de/land/kalender/index.php?date_start=03.04.2026&date_stop=03.04.2026">browse events on berlin.de</a>.`,
       ].join('\n'),
+    );
+  });
+
+  it('adds the "no day off" note between the greeting and the events link when today is a weekend holiday', () => {
+    const out = formatTodayHolidayGreeting(TAG_DER_EINHEIT_SAT);
+    const greetingAt = out.indexOf('congrats!');
+    const noteAt = out.indexOf("It's a weekend");
+    const linkAt = out.indexOf('berlin.de');
+    expect(greetingAt).toBeGreaterThanOrEqual(0);
+    expect(noteAt).toBeGreaterThan(greetingAt);
+    expect(linkAt).toBeGreaterThan(noteAt);
+  });
+
+  it('does not add the "no day off" note for weekday holidays', () => {
+    expect(formatTodayHolidayGreeting(KARFREITAG)).not.toContain(
+      "It's a weekend",
     );
   });
 });

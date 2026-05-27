@@ -33,6 +33,20 @@ const MONTHS_SHORT = [
 const SHOPS_CLOSED = 'most shops will be closed';
 
 /**
+ * Appended to any reminder / greeting whose holiday lands on a
+ * Saturday or Sunday. Without this note the user gets a perfectly
+ * cheerful "in 3 days it's Tag der Deutschen Einheit on Sat 3 Oct"
+ * with no acknowledgement of the bitter truth that the holiday is
+ * being wasted on a day they were already off.
+ *
+ * `WEEKEND_NOTE` is the standalone paragraph form used in reminders /
+ * today greeting; `WEEKEND_NOTE_SHORT` is the inline italic form
+ * appended to bullets in the holiday list to keep them compact.
+ */
+const WEEKEND_NOTE = "It's a weekend, unlucky, no day off for us.";
+const WEEKEND_NOTE_SHORT = '<i>(unlucky, no day off)</i>';
+
+/**
  * Wiktionary entry for "Brückentag" — covers the German term directly,
  * with etymology and the cross-language synonyms (puente, faire le pont,
  * Fenstertag). Better fit than the English Wikipedia "Long weekend"
@@ -59,7 +73,9 @@ const BERLIN_EVENTS_BASE_URL =
 /**
  * Builds the user-facing text for a single threshold reminder. The shape
  * differs per bucket: the 30-day version optionally appends a "long
- * weekend" hint when a second Berlin holiday falls within 7 days.
+ * weekend" hint when a second Berlin holiday falls within 7 days, and
+ * all four buckets append a "no day off" commiseration when the holiday
+ * lands on a Saturday or Sunday.
  */
 export function formatHolidayReminder(
   bucket: Bucket,
@@ -68,18 +84,21 @@ export function formatHolidayReminder(
 ): string {
   const friendly = formatFriendlyDate(holiday.date);
   const title = formatHolidayTitle(holiday);
+  const weekend = isWeekend(holiday.date);
+  const weekendSuffix = weekend ? `\n\n${WEEKEND_NOTE}` : '';
 
   switch (bucket) {
     case 30: {
       const base = `Heads up: in 30 days it's ${title} on <b>${friendly}</b>.`;
-      return bridge ? `${base}\n\n${formatBridge(bridge)}` : base;
+      const withBridge = bridge ? `${base}\n\n${formatBridge(bridge)}` : base;
+      return `${withBridge}${weekendSuffix}`;
     }
     case 7:
-      return `${title} is one week away (<b>${friendly}</b>).`;
+      return `${title} is one week away (<b>${friendly}</b>).${weekendSuffix}`;
     case 3:
-      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.\n\n${formatBerlinEventsLink(holiday.date)}`;
+      return `${title} is in 3 days (<b>${friendly}</b>). Time to stock the fridge — ${SHOPS_CLOSED}.${weekendSuffix}\n\n${formatBerlinEventsLink(holiday.date)}`;
     case 1:
-      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!\n\n${formatBerlinEventsLink(holiday.date)}`;
+      return `${title} is tomorrow (<b>${friendly}</b>). Last chance to stock up — ${SHOPS_CLOSED}!${weekendSuffix}\n\n${formatBerlinEventsLink(holiday.date)}`;
   }
 }
 
@@ -91,7 +110,8 @@ export function formatHolidayReminder(
  */
 export function formatTodayHolidayGreeting(holiday: Holiday): string {
   const title = formatHolidayTitle(holiday);
-  return `Today is ${title}, congrats!\n\n${formatBerlinEventsLink(holiday.date, 'today')}`;
+  const weekendSuffix = isWeekend(holiday.date) ? `\n\n${WEEKEND_NOTE}` : '';
+  return `Today is ${title}, congrats!${weekendSuffix}\n\n${formatBerlinEventsLink(holiday.date, 'today')}`;
 }
 
 /**
@@ -181,10 +201,11 @@ export function formatHolidayList(opts: {
 function formatHolidayBullet(h: Holiday, today?: Date): string {
   const friendly = formatFriendlyDate(h.date);
   const title = formatHolidayTitle(h);
+  const weekendSuffix = isWeekend(h.date) ? ` ${WEEKEND_NOTE_SHORT}` : '';
   if (today && isSameUtcDay(h.date, today)) {
-    return `• <b>Today</b> (${friendly}) — ${title}`;
+    return `• <b>Today</b> (${friendly}) — ${title}${weekendSuffix}`;
   }
-  return `• ${friendly} — ${title}`;
+  return `• ${friendly} — ${title}${weekendSuffix}`;
 }
 
 /**
@@ -224,6 +245,12 @@ function isSameUtcDay(yyyyMmDd: string, today: Date): boolean {
   const m = String(today.getUTCMonth() + 1).padStart(2, '0');
   const d = String(today.getUTCDate()).padStart(2, '0');
   return yyyyMmDd === `${y}-${m}-${d}`;
+}
+
+function isWeekend(yyyyMmDd: string): boolean {
+  const [y, m, d] = yyyyMmDd.split('-').map(n => Number.parseInt(n, 10));
+  const dow = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+  return dow === 0 || dow === 6;
 }
 
 function formatBridge(bridge: BridgeInfo): string {
