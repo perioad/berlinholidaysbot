@@ -15,7 +15,12 @@ import { mapLogRetention } from '../util/log-retention';
 export type CronLambdaProps = {
   functionName: string;
   memoryMb: number;
-  /** Lambda execution timeout in seconds. ~300 leaves headroom for ~750 users. */
+  /**
+   * Lambda execution timeout in seconds. AWS hard-caps at 900s (15min).
+   * With the broadcaster at 50ms delay and ~150ms Telegram RTT per
+   * `sendMessage`, 900s supports roughly 4,000-4,500 active users
+   * per daily run before we run out of wall-clock time.
+   */
   timeoutSec: number;
   logRetentionDays: number;
   /** EventBridge cron expression, e.g. `cron(0 10 * * ? *)` for daily 10:00 UTC. */
@@ -38,7 +43,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
  * the same Telegram bots and reads the same user table.
  *
  * Memory is kept modest (default 256 MB) since the work is mostly I/O,
- * but the timeout is much higher (default 300s) so the broadcaster can
+ * but the timeout is much higher (default 900s) so the broadcaster can
  * pace through a few hundred users without truncation.
  */
 export class CronLambda extends Construct {

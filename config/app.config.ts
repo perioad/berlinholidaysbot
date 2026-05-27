@@ -77,7 +77,11 @@ export const appConfig: AppConfig = {
   cron: {
     functionName: 'berlin-holidays-bot-cron',
     memoryMb: 256,
-    timeoutSec: 300,
+    // AWS Lambda hard cap. With the broadcaster at 50ms delay and
+    // ~150ms Telegram RTT (~200ms per recipient), this supports
+    // roughly 4,000-4,500 active users per run, leaving headroom for
+    // cold start, secrets fetch, holiday API call, and the DDB scan.
+    timeoutSec: 900,
     logRetentionDays: 30,
     scheduleExpression: 'cron(0 10 * * ? *)',
   },

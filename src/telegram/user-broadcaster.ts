@@ -5,7 +5,7 @@ import type { BotUser } from '../core/domain/user';
 import type { Logger } from '../core/logger/logger';
 import { sleep as defaultSleep } from '../core/util/sleep';
 
-const DEFAULT_DELAY_MS = 200;
+const DEFAULT_DELAY_MS = 50;
 const BLOCKED_BY_USER = 403;
 
 export type BroadcastResult = {
@@ -22,7 +22,14 @@ export type CreateUserBroadcasterOptions = {
   bot: Bot;
   users: UsersRepository;
   logger: Logger;
-  /** Milliseconds to wait between sends. Default 200ms (~5 msg/sec). */
+  /**
+   * Milliseconds to wait between sends. Default 50ms. Note that this is
+   * additive to the Telegram API round-trip time per `sendMessage`
+   * (~100-200ms in practice), so the actual outbound rate sits well
+   * under Telegram's documented ~30 msg/sec broadcast ceiling - the
+   * delay is mostly a safety margin against bursts, not the primary
+   * throttle.
+   */
   delayMs?: number;
   /** Injection point for tests so we don't actually wait. */
   sleep?: (ms: number) => Promise<void>;

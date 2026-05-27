@@ -29,7 +29,7 @@ import { createUserBroadcaster } from '../../src/telegram/user-broadcaster';
  */
 
 const BOT_INIT_TIMEOUT_MS = 5000;
-const RUN_TIMEOUT_MS = 290_000; // < the 300s Lambda timeout, with headroom
+const RUN_TIMEOUT_MS = 890_000; // < the 900s Lambda timeout, with headroom
 
 let cachedDepsPromise: Promise<RunDailyHolidayCheckDeps> | null = null;
 
